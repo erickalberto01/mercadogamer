@@ -9,7 +9,5 @@ directory = "./"
 [[d1_databases]]
 binding = "DB"
 database_name = "mercadogamer"
-# ⚠️ REEMPLAZAR: crea la base D1 "mercadogamer" en el panel de Cloudflare
-# (Workers & Pages → D1 → Create) y pega aquí su database_id real.
-# Sin el ID real, el Worker no despliega. Ver README.md, paso 2.
-database_id = "00000000-0000-0000-0000-000000000000"
+# Base D1 "mercadogamer" creada en el panel 23/11/2026.
+database_id = "d4073b0b-ed63-4a35-a9cd-a451c151561c"
