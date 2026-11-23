@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎮 Mercado Gamer — Compra y vende cuentas de juegos</title>
+<meta name="description" content="Mercado Gamer: publica y compra cuentas de Free Fire, Clash of Clans, Clash Royale y Roblox. Contacto directo por WhatsApp, con reseñas y confianza de vendedor.">
+<style>
+:root{
+  --bg:#070b16; --bg2:#0d1326; --card:#121a33; --card2:#182144;
+  --line:#26305a; --text:#eef2ff; --muted:#9aa7d0;
+  --neon:#22ff88; --neon2:#22d3ee; --purple:#a855f7; --pink:#ec4899;
+  --gold:#fbbf24; --red:#f87171; --wa:#25d366;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:radial-gradient(1000px 500px at 80% -10%,rgba(168,85,247,.25),transparent 60%),radial-gradient(800px 400px at 0% 0%,rgba(34,211,238,.18),transparent 55%),var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;min-height:100vh}
+a{color:var(--neon2);text-decoration:none}
+a:hover{text-decoration:underline}
+header{position:sticky;top:0;z-index:50;background:rgba(7,11,22,.92);backdrop-filter:blur(8px);border-bottom:2px solid var(--line)}
+.nav{max-width:1100px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.logo{font-size:22px;font-weight:900;letter-spacing:1px;color:#fff;text-shadow:0 0 14px var(--neon),0 0 30px rgba(34,255,136,.5);white-space:nowrap}
+.logo span{color:var(--neon)}
+.nav-links{display:flex;gap:6px;flex-wrap:wrap}
+.nav-links a{color:var(--text);font-weight:700;padding:8px 12px;border-radius:10px}
+.nav-links a:hover{background:var(--card2);text-decoration:none}
+.nav-user{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{display:inline-block;border:0;cursor:pointer;font-weight:800;padding:10px 18px;border-radius:12px;font-size:15px;color:#04120a;background:linear-gradient(135deg,var(--neon),#00c853);box-shadow:0 0 18px rgba(34,255,136,.35)}
+.btn:hover{filter:brightness(1.1)}
+.btn.ghost{background:var(--card2);color:var(--text);box-shadow:none;border:1px solid var(--line)}
+.btn.wa{background:linear-gradient(135deg,#2ee06f,#128c4b);color:#fff;box-shadow:0 0 16px rgba(37,211,102,.35);width:100%;text-align:center}
+.btn.danger{background:linear-gradient(135deg,#f87171,#dc2626);color:#fff;box-shadow:none}
+.btn.small{padding:7px 12px;font-size:13px}
+main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
+.hero{text-align:center;padding:28px 12px 10px}
+.hero h1{font-size:clamp(30px,6vw,52px);font-weight:900;line-height:1.05;background:linear-gradient(90deg,var(--neon),var(--neon2),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 40px rgba(34,211,238,.25)}
+.hero p{color:var(--muted);font-size:17px;margin-top:10px}
+.hero .cta{margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.notice{margin:20px 0;padding:14px 16px;border:1px solid #f59e0b;background:rgba(245,158,11,.1);border-radius:14px;font-size:14px;line-height:1.55;color:#fde68a}
+.notice b{color:#fbbf24}
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}
+.filters input,.filters select{flex:1;min-width:140px;background:var(--card);border:1px solid var(--line);color:var(--text);padding:12px 14px;border-radius:12px;font-size:15px;outline:none}
+.filters input:focus,.filters select:focus{border-color:var(--neon2);box-shadow:0 0 0 2px rgba(34,211,238,.25)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.card{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s;cursor:pointer}
+.card:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 0 1px var(--purple)}
+.card img,.card .img-ph{width:100%;height:170px;object-fit:cover;display:block}
+.card .img-ph{display:flex;align-items:center;justify-content:center;font-size:56px;background:linear-gradient(135deg,#1e293b,#312e81)}
+.card-body{padding:14px;display:flex;flex-direction:column;gap:8px;flex:1}
+.card h3{font-size:17px;line-height:1.3}
+.badge{display:inline-block;font-size:12px;font-weight:800;padding:4px 10px;border-radius:999px;background:rgba(168,85,247,.25);color:#d8b4fe;border:1px solid rgba(168,85,247,.5)}
+.price{font-size:22px;font-weight:900;color:var(--neon)}
+.price small{font-size:13px;color:var(--muted);font-weight:600}
+.seller{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+.seller b{color:var(--text)}
+.stars{color:var(--gold);letter-spacing:1px;white-space:nowrap}
+.trust{font-size:12px;font-weight:800;padding:3px 8px;border-radius:999px}
+.trust.high{background:rgba(34,255,136,.15);color:var(--neon)}
+.trust.mid{background:rgba(251,191,36,.15);color:var(--gold)}
+.trust.low{background:rgba(248,113,113,.15);color:var(--red)}
+.meta{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+.card .btn{margin-top:auto}
+.detail{display:grid;grid-template-columns:1fr;gap:18px}
+@media(min-width:760px){.detail{grid-template-columns:1.4fr 1fr}}
+.detail img,.detail .img-ph{width:100%;max-height:420px;object-fit:cover;border-radius:18px;display:block}
+.detail .img-ph{display:flex;align-items:center;justify-content:center;font-size:90px;min-height:260px;background:linear-gradient(135deg,#1e293b,#312e81)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
+.panel h2{font-size:22px;margin-bottom:6px}
+.panel h3{margin:16px 0 8px;font-size:16px}
+.panel p{color:#c7d0f2;line-height:1.6;white-space:pre-wrap}
+.form{max-width:560px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px}
+.form h2{margin-bottom:16px;text-align:center}
+.field{margin-bottom:14px}
+.field label{display:block;font-weight:700;margin-bottom:6px;font-size:14px}
+.field input,.field select,.field textarea{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--text);padding:12px 14px;border-radius:12px;font-size:15px;outline:none}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--neon2);box-shadow:0 0 0 2px rgba(34,211,238,.25)}
+.field small{color:var(--muted);font-size:12px}
+.field textarea{min-height:110px;resize:vertical}
+.err{background:rgba(248,113,113,.15);border:1px solid var(--red);color:#fecaca;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px}
+.ok{background:rgba(34,255,136,.12);border:1px solid var(--neon);color:#bbf7d0;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px}
+.review{border-top:1px solid var(--line);padding:12px 0}
+.review .who{font-weight:800}
+.review .when{font-size:12px;color:var(--muted)}
+.review p{margin-top:4px;color:#c7d0f2}
+.star-picker{font-size:30px;cursor:pointer;letter-spacing:4px}
+.star-picker span{color:#475569}
+.star-picker span.on{color:var(--gold)}
+.empty{text-align:center;color:var(--muted);padding:40px 10px;font-size:17px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111827;border:1px solid var(--neon);color:#d1fae5;padding:12px 18px;border-radius:12px;z-index:99;box-shadow:0 8px 30px rgba(0,0,0,.6);font-weight:700}
+footer{text-align:center;color:var(--muted);font-size:13px;padding:24px 12px;border-top:1px solid var(--line)}
+footer a{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="nav">
+    <a class="logo" href="#/" style="text-decoration:none">🎮 MERCADO <span>GAMER</span></a>
+    <nav class="nav-links">
+      <a href="#/">🏠 Inicio</a>
+      <a href="#/publicar">➕ Publicar</a>
+    </nav>
+    <div class="nav-user" id="navUser"></div>
+  </div>
+</header>
+<main id="app"></main>
+<footer>
+  Mercado Gamer — Compra y vende cuentas de juegos con contacto por WhatsApp.<br>
+  Grupo de Facebook: <b>Cambio Y Ventas De Cuenta Clash of Clans Y Clash Royale Y Cualquier Juego</b> · Los tratos son bajo tu responsabilidad.
+</footer>
+<script>
+'use strict';
+var GAMES = ['Free Fire', 'Clash of Clans', 'Clash Royale', 'Roblox', 'Otro'];
+var app = document.getElementById('app');
+var navUser = document.getElementById('navUser');
+var me = null; // {id, username, whatsapp} o null
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function money(price, currency) {
+  var n = Number(price);
+  var fmt = n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (currency === 'USD' ? 'US$' : 'RD$') + fmt;
+}
+
+function timeAgo(ts) {
+  var s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'ahora mismo';
+  var m = Math.floor(s / 60);
+  if (m < 60) return 'hace ' + m + ' min';
+  var h = Math.floor(m / 60);
+  if (h < 24) return 'hace ' + h + ' h';
+  var d = Math.floor(h / 24);
+  if (d < 30) return 'hace ' + d + ' d';
+  return new Date(ts).toLocaleDateString('es-DO');
+}
+
+function starsHtml(avg, count) {
+  if (avg === null || avg === undefined || !count) return '<span class="stars">☆☆☆☆☆</span> <small>sin reseñas</small>';
+  var full = Math.round(avg);
+  var s = '';
+  for (var i = 1; i <= 5; i++) s += i <= full ? '★' : '☆';
+  return '<span class="stars">' + s + '</span> <small>' + avg.toFixed(1) + ' (' + count + ')</small>';
+}
+
+function trustHtml(pct) {
+  var cls = pct >= 80 ? 'high' : (pct >= 50 ? 'mid' : 'low');
+  return '<span class="trust ' + cls + '">' + pct + '% confianza</span>';
+}
+
+function waLink(whatsapp, text) {
+  var digits = String(whatsapp || '').replace(/\D/g, '');
+  return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(text || 'Hola, vi tu publicación en Mercado Gamer.');
+}
+
+function toast(msg) {
+  var t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function () { t.remove(); }, 3500);
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  var res = await fetch(path, opts);
+  var data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  if (!res.ok) {
+    var msg = (data && data.error) || ('Error ' + res.status);
+    var err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+async function refreshMe() {
+  try {
+    var d = await api('/api/auth/me');
+    me = d.user;
+  } catch (e) { me = null; }
+  renderNav();
+}
+
+function renderNav() {
+  if (me) {
+    navUser.innerHTML =
+      '<a href="#/perfil/' + esc(me.username) + '" style="color:var(--neon);font-weight:800">👤 ' + esc(me.username) + '</a>' +
+      '<button class="btn ghost small" id="btnLogout">Salir</button>';
+    document.getElementById('btnLogout').onclick = async function () {
+      try { await api('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+      me = null;
+      renderNav();
+      location.hash = '#/';
+      toast('Sesión cerrada.');
+    };
+  } else {
+    navUser.innerHTML =
+      '<a href="#/login" class="btn ghost small">Entrar</a>' +
+      '<a href="#/registro" class="btn small">Crear cuenta</a>';
+  }
+}
+
+function noticeHtml() {
+  return '<div class="notice">⚠️ <b>AVISO DE SEGURIDAD:</b> vender o comprar cuentas va contra las reglas de los juegos (Garena, Supercell, Roblox) y puede llevar al <b>baneo de la cuenta</b>. Los tratos son bajo tu responsabilidad. Revisa las estrellas y el porcentaje de confianza del vendedor, pide pruebas y, si puedes, usa un <b>intermediario de confianza</b>. Mercado Gamer no guarda dinero ni participa en los pagos.</div>';
+}
+
+function gameBadge(game) {
+  return '<span class="badge">🎮 ' + esc(game) + '</span>';
+}
+
+function cardHtml(l) {
+  var img = l.image_url
+    ? '<img src="' + esc(l.image_url) + '" alt="' + esc(l.title) + '" loading="lazy" onerror="this.outerHTML=\'<div class=\\\'img-ph\\\'>🎮</div>\'">'
+    : '<div class="img-ph">🎮</div>';
+  return '<article class="card" data-id="' + l.id + '">' + img +
+    '<div class="card-body">' +
+    '<div>' + gameBadge(l.game) + (l.status === 'vendida' ? ' <span class="badge" style="background:rgba(248,113,113,.2);color:#fca5a5;border-color:rgba(248,113,113,.5)">VENDIDA</span>' : '') + '</div>' +
+    '<h3>' + esc(l.title) + '</h3>' +
+    '<div class="price">' + money(l.price, l.currency) + ' <small>' + esc(l.currency) + '</small></div>' +
+    '<div class="seller">👤 <b>' + esc(l.seller.username) + '</b> ' + starsHtml(l.seller.avg_stars, l.seller.review_count) + '</div>' +
+    '<div>' + trustHtml(l.seller.trust_pct) + '</div>' +
+    '<div class="meta"><span>👁️ ' + l.views + ' vistas</span><span>' + timeAgo(l.created_at) + '</span></div>' +
+    '<a class="btn wa" href="' + waLink(l.seller.whatsapp, 'Hola, vi tu publicación en Mercado Gamer: ' + l.title + ' (' + money(l.price, l.currency) + '). ¿Sigue disponible?') + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">💬 WhatsApp</a>' +
+    '</div></article>';
+}
+
+function bindCards() {
+  app.querySelectorAll('.card[data-id]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('a,button')) return;
+      location.hash = '#/publicacion/' + el.getAttribute('data-id');
+    });
+  });
+}
+
+// ---------- Vistas ----------
+
+async function viewHome() {
+  app.innerHTML =
+    '<section class="hero"><h1>Compra y vende cuentas de juegos</h1>' +
+    '<p>Free Fire, Clash of Clans, Clash Royale y Roblox. Contacto directo por WhatsApp, con reseñas y confianza de cada vendedor.</p>' +
+    '<div class="cta"><a class="btn" href="#/publicar">➕ Publicar mi cuenta</a>' +
+    '<a class="btn ghost" href="#/registro">Crear mi cuenta gratis</a></div></section>' +
+    noticeHtml() +
+    '<div class="filters">' +
+    '<input id="fQ" type="search" placeholder="🔍 Buscar: ej. cuenta veterana, nivel 70...">' +
+    '<select id="fGame"><option value="">Todos los juegos</option>' + GAMES.map(function (g) { return '<option>' + g + '</option>'; }).join('') + '</select>' +
+    '<select id="fSort"><option value="recent">Más recientes</option><option value="views">Más vistas</option></select>' +
+    '</div>' +
+    '<div id="list"><p class="empty">Cargando publicaciones…</p></div>';
+  var q = document.getElementById('fQ'), g = document.getElementById('fGame'), s = document.getElementById('fSort');
+  var timer = null;
+  function reload() {
+    var params = new URLSearchParams();
+    if (q.value.trim()) params.set('q', q.value.trim());
+    if (g.value) params.set('game', g.value);
+    params.set('sort', s.value);
+    var listEl = document.getElementById('list');
+    api('/api/listings?' + params.toString()).then(function (items) {
+      if (!items.length) {
+        listEl.innerHTML = '<p class="empty">😕 Todavía no hay publicaciones con ese filtro.<br>Sé el primero en publicar una cuenta.</p>';
+        return;
+      }
+      listEl.innerHTML = '<div class="grid">' + items.map(cardHtml).join('') + '</div>';
+      bindCards();
+    }).catch(function (e) {
+      listEl.innerHTML = '<p class="empty">No se pudieron cargar las publicaciones: ' + esc(e.message) + '</p>';
+    });
+  }
+  q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(reload, 400); });
+  g.addEventListener('change', reload);
+  s.addEventListener('change', reload);
+  reload();
+}
+
+// ---------- Detalle ----------
+
+async function viewDetail(id) {
+  app.innerHTML = '<p class="empty">Cargando publicación…</p>';
+  var l;
+  try { l = await api('/api/listings/' + id); }
+  catch (e) { app.innerHTML = '<p class="empty">No se encontró esta publicación.</p><p style="text-align:center"><a href="#/">← Volver al inicio</a></p>'; return; }
+  var isOwner = me && me.id === l.user_id;
+  var img = l.image_url
+    ? '<img src="' + esc(l.image_url) + '" alt="' + esc(l.title) + '" onerror="this.outerHTML=\'<div class=\\\'img-ph\\\'>🎮</div>\'">'
+    : '<div class="img-ph">🎮</div>';
+  app.innerHTML =
+    '<p><a href="#/">← Volver</a></p>' +
+    '<div class="detail" style="margin-top:12px">' +
+    '<div>' + img +
+    '<div class="panel" style="margin-top:14px"><h2>' + esc(l.title) + '</h2>' +
+    '<p>' + esc(l.description || 'Sin descripción.') + '</p></div></div>' +
+    '<div>' +
+    '<div class="panel"><div>' + gameBadge(l.game) + (l.status === 'vendida' ? ' <span class="badge" style="background:rgba(248,113,113,.2);color:#fca5a5;border-color:rgba(248,113,113,.5)">VENDIDA</span>' : '') + '</div>' +
+    '<div class="price" style="margin:10px 0">' + money(l.price, l.currency) + ' <small>' + esc(l.currency) + '</small></div>' +
+    '<div class="meta"><span>👁️ ' + l.views + ' vistas</span><span>Publicada ' + timeAgo(l.created_at) + '</span></div>' +
+    '<h3>Vendedor</h3>' +
+    '<div class="seller">👤 <b><a href="#/perfil/' + esc(l.seller.username) + '">' + esc(l.seller.username) + '</a></b></div>' +
+    '<div style="margin:6px 0">' + starsHtml(l.seller.avg_stars, l.seller.review_count) + ' ' + trustHtml(l.seller.trust_pct) + '</div>' +
+    '<a class="btn wa" style="margin-top:10px" href="' + waLink(l.seller.whatsapp, 'Hola, vi tu publicación en Mercado Gamer: ' + l.title + ' (' + money(l.price, l.currency) + '). ¿Sigue disponible?') + '" target="_blank" rel="noopener">💬 Hablar por WhatsApp</a>' +
+    (isOwner ? '<button class="btn ' + (l.status === 'vendida' ? '' : 'danger') + '" id="btnStatus" style="width:100%;margin-top:10px">' + (l.status === 'vendida' ? '↩️ Volver a activar' : '✅ Marcar como vendida') + '</button>' : '') +
+    '</div>' +
+    noticeHtml() +
+    '</div></div>';
+  var btn = document.getElementById('btnStatus');
+  if (btn) {
+    btn.onclick = async function () {
+      try {
+        await api('/api/listings/' + l.id, { method: 'PATCH', body: JSON.stringify({ status: l.status === 'vendida' ? 'activa' : 'vendida' }) });
+        toast('Publicación actualizada.');
+        viewDetail(l.id);
+      } catch (e) { toast(e.message); }
+    };
+  }
+}
+
+// ---------- Publicar ----------
+
+function viewPublish() {
+  if (!me) { location.hash = '#/login'; toast('Primero crea tu cuenta o entra.'); return; }
+  app.innerHTML =
+    '<form class="form" id="pubForm"><h2>➕ Publicar una cuenta</h2><div id="formErr"></div>' +
+    '<div class="field"><label>Título *</label><input name="title" required minlength="3" maxlength="100" placeholder="Ej. Cuenta Free Fire nivel 72, veterana"></div>' +
+    '<div class="field"><label>Juego *</label><select name="game">' + GAMES.map(function (g) { return '<option>' + g + '</option>'; }).join('') + '</select></div>' +
+    '<div class="field"><label>Precio *</label><input name="price" type="number" min="1" step="0.01" required placeholder="Ej. 2500"></div>' +
+    '<div class="field"><label>Moneda *</label><select name="currency"><option>DOP</option><option>USD</option></select></div>' +
+    '<div class="field"><label>URL de la foto (opcional)</label><input name="image_url" type="url" placeholder="https://... (foto de la cuenta)"><small>Si no tienes foto, se muestra un ícono del juego.</small></div>' +
+    '<div class="field"><label>Descripción</label><textarea name="description" maxlength="1000" placeholder="Nivel, personajes, skins, armas, por qué la vendes..."></textarea></div>' +
+    '<button class="btn" type="submit" style="width:100%">🚀 Publicar ahora</button></form>';
+  document.getElementById('pubForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var fd = new FormData(e.target);
+    var body = {
+      title: fd.get('title'), game: fd.get('game'),
+      price: Number(fd.get('price')), currency: fd.get('currency'),
+      description: fd.get('description'), image_url: fd.get('image_url')
+    };
+    try {
+      var r = await api('/api/listings', { method: 'POST', body: JSON.stringify(body) });
+      toast('¡Publicación creada!');
+      location.hash = '#/publicacion/' + r.id;
+    } catch (err) {
+      document.getElementById('formErr').innerHTML = '<div class="err">' + esc(err.message) + '</div>';
+    }
+  });
+}
+
+// ---------- Auth ----------
+
+function viewLogin() {
+  app.innerHTML =
+    '<form class="form" id="loginForm"><h2>👋 Entrar</h2><div id="formErr"></div>' +
+    '<div class="field"><label>Usuario</label><input name="username" required autocomplete="username"></div>' +
+    '<div class="field"><label>Contraseña</label><input name="password" type="password" required autocomplete="current-password"></div>' +
+    '<button class="btn" type="submit" style="width:100%">Entrar</button>' +
+    '<p style="text-align:center;margin-top:12px;color:var(--muted)">¿No tienes cuenta? <a href="#/registro">Crear una gratis</a></p></form>';
+  document.getElementById('loginForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var fd = new FormData(e.target);
+    try {
+      var r = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: fd.get('username'), password: fd.get('password') }) });
+      me = r.user;
+      renderNav();
+      toast('¡Hola de nuevo, ' + me.username + '!');
+      location.hash = '#/';
+    } catch (err) {
+      document.getElementById('formErr').innerHTML = '<div class="err">' + esc(err.message) + '</div>';
+    }
+  });
+}
+
+function viewRegister() {
+  app.innerHTML =
+    '<form class="form" id="regForm"><h2>🎮 Crear mi cuenta</h2><div id="formErr"></div>' +
+    '<div class="field"><label>Usuario *</label><input name="username" required minlength="3" maxlength="20" placeholder="ej. erick_gamer"><small>Solo letras, números y guion bajo. Así te verán los demás.</small></div>' +
+    '<div class="field"><label>Número de WhatsApp *</label><input name="whatsapp" required inputmode="tel" placeholder="Ej. 18095551234"><small>Con código de país (RD: 1 + 809/829/849). Es el botón de contacto de tus publicaciones.</small></div>' +
+    '<div class="field"><label>Contraseña *</label><input name="password" type="password" required minlength="6" autocomplete="new-password" placeholder="Mínimo 6 caracteres"></div>' +
+    '<button class="btn" type="submit" style="width:100%">Crear cuenta</button>' +
+    '<p style="text-align:center;margin-top:12px;color:var(--muted)">¿Ya tienes cuenta? <a href="#/login">Entrar</a></p></form>';
+  document.getElementById('regForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var fd = new FormData(e.target);
+    try {
+      var r = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: fd.get('username'), whatsapp: fd.get('whatsapp'), password: fd.get('password') }) });
+      me = r.user;
+      renderNav();
+      toast('¡Cuenta creada! Bienvenido, ' + me.username + '.');
+      location.hash = '#/';
+    } catch (err) {
+      document.getElementById('formErr').innerHTML = '<div class="err">' + esc(err.message) + '</div>';
+    }
+  });
+}
+
+// ---------- Perfil y reseñas ----------
+
+async function viewProfile(username) {
+  app.innerHTML = '<p class="empty">Cargando perfil…</p>';
+  var data;
+  try { data = await api('/api/users/' + encodeURIComponent(username)); }
+  catch (e) { app.innerHTML = '<p class="empty">Ese usuario no existe.</p><p style="text-align:center"><a href="#/">← Volver al inicio</a></p>'; return; }
+  var u = data.user;
+  var isSelf = me && me.id === u.id;
+  var html =
+    '<div class="panel"><h2>👤 ' + esc(u.username) + '</h2>' +
+    '<div style="margin:8px 0">' + starsHtml(u.avg_stars, u.review_count) + ' ' + trustHtml(u.trust_pct) + '</div>' +
+    '<p style="color:var(--muted)">' + u.review_count + ' reseña(s) · Miembro desde ' + new Date(u.created_at).toLocaleDateString('es-DO') + '</p>' +
+    '<a class="btn wa" style="margin-top:12px;width:auto" href="' + waLink(u.whatsapp, 'Hola ' + u.username + ', te escribo desde Mercado Gamer.') + '" target="_blank" rel="noopener">💬 WhatsApp: +' + esc(u.whatsapp) + '</a></div>' +
+    '<div class="panel" style="margin-top:16px"><h3>📦 Publicaciones de ' + esc(u.username) + ' (' + data.listings.length + ')</h3>' +
+    (data.listings.length ? '<div class="grid">' + data.listings.map(cardHtml).join('') + '</div>' : '<p style="color:var(--muted)">Todavía no ha publicado nada.</p>') + '</div>' +
+    '<div class="panel" style="margin-top:16px"><h3>⭐ Reseñas recibidas (' + data.reviews.length + ')</h3><div id="reviewList">' +
+    (data.reviews.length ? data.reviews.map(function (r) {
+      return '<div class="review"><span class="who">' + esc(r.reviewer) + '</span> ' + starsHtml(r.stars, 1).replace(/<small>.*<\/small>/, '') +
+        ' <span class="when">' + timeAgo(r.created_at) + '</span><p>' + esc(r.comment || '') + '</p></div>';
+    }).join('') : '<p style="color:var(--muted)">Aún no tiene reseñas. ¡Sé el primero en dejarle una después de un trato!</p>') +
+    '</div><div id="reviewForm"></div></div>';
+  app.innerHTML = html;
+  bindCards();
+  if (!isSelf && me) {
+    var mine = null;
+    try { mine = (await api('/api/users/' + encodeURIComponent(u.username) + '/my-review')).review; } catch (e) {}
+    var formEl = document.getElementById('reviewForm');
+    var picked = mine ? mine.stars : 5;
+    formEl.innerHTML = '<h3 style="margin-top:16px">' + (mine ? '✏️ Actualizar mi reseña' : '✍️ Dejar una reseña a ' + esc(u.username)) + '</h3>' +
+      '<div class="star-picker" id="starPicker">' + [1, 2, 3, 4, 5].map(function (n) { return '<span data-n="' + n + '" class="' + (n <= picked ? 'on' : '') + '">★</span>'; }).join('') + '</div>' +
+      '<div class="field" style="margin-top:10px"><textarea id="revComment" maxlength="500" placeholder="¿Cómo fue el trato? ¿Cumplió, respondió rápido, todo bien?">' + esc(mine ? mine.comment || '' : '') + '</textarea></div>' +
+      '<div id="revErr"></div><button class="btn" id="btnReview">' + (mine ? 'Actualizar reseña' : 'Publicar reseña') + '</button>';
+    var picker = document.getElementById('starPicker');
+    picker.querySelectorAll('span').forEach(function (sp) {
+      sp.addEventListener('click', function () {
+        picked = Number(sp.getAttribute('data-n'));
+        picker.querySelectorAll('span').forEach(function (s2) {
+          s2.className = Number(s2.getAttribute('data-n')) <= picked ? 'on' : '';
+        });
+      });
+    });
+    document.getElementById('btnReview').onclick = async function () {
+      try {
+        await api('/api/reviews', { method: 'POST', body: JSON.stringify({ reviewed: u.username, stars: picked, comment: document.getElementById('revComment').value }) });
+        toast('¡Reseña guardada!');
+        viewProfile(u.username);
+      } catch (e) {
+        document.getElementById('revErr').innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+      }
+    };
+  } else if (!isSelf) {
+    document.getElementById('reviewForm').innerHTML = '<p style="color:var(--muted);margin-top:14px"><a href="#/login">Entra</a> o <a href="#/registro">crea tu cuenta</a> para dejar una reseña después de un trato.</p>';
+  }
+}
+
+// ---------- Router ----------
+
+function route() {
+  var h = location.hash || '#/';
+  var parts = h.replace(/^#\/?/, '').split('/');
+  var page = parts[0] || '';
+  if (page === '') return viewHome();
+  if (page === 'publicacion' && parts[1]) return viewDetail(Number(parts[1]));
+  if (page === 'publicar') return viewPublish();
+  if (page === 'login') return viewLogin();
+  if (page === 'registro') return viewRegister();
+  if (page === 'perfil' && parts[1]) return viewProfile(decodeURIComponent(parts[1]));
+  app.innerHTML = '<p class="empty">Página no encontrada.</p><p style="text-align:center"><a href="#/">← Volver al inicio</a></p>';
+}
+
+window.addEventListener('hashchange', route);
+
+(async function init() {
+  await refreshMe();
+  route();
+})();
+</script>
+</body>
+</html>
