@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🎮 Mercado Gamer — Compra y vende cuentas de juegos</title>
-<meta name="description" content="Mercado Gamer: publica y compra cuentas de Free Fire, Clash of Clans, Clash Royale y Roblox. Contacto directo por WhatsApp, con reseñas y confianza de vendedor.">
+<meta name="description" content="Mercado Gamer: publica y compra cuentas de Free Fire, Clash of Clans, Clash Royale, Roblox, Steam, Epic Games y más. Contacto directo por WhatsApp, con reseñas y confianza de vendedor.">
 <style>
 :root{
   --bg:#070b16; --bg2:#0d1326; --card:#121a33; --card2:#182144;
@@ -108,7 +108,7 @@ footer a{color:var(--muted)}
 </footer>
 <script>
 'use strict';
-var GAMES = ['Free Fire', 'Clash of Clans', 'Clash Royale', 'Roblox', 'Otro'];
+var GAMES = ['Free Fire', 'Clash of Clans', 'Clash Royale', 'Roblox', 'Steam', 'Epic Games', 'PlayStation', 'Xbox', 'Nintendo', 'Otro'];
 var app = document.getElementById('app');
 var navUser = document.getElementById('navUser');
 var me = null; // {id, username, whatsapp} o null
@@ -206,7 +206,7 @@ function renderNav() {
 }
 
 function noticeHtml() {
-  return '<div class="notice">⚠️ <b>AVISO DE SEGURIDAD:</b> vender o comprar cuentas va contra las reglas de los juegos (Garena, Supercell, Roblox) y puede llevar al <b>baneo de la cuenta</b>. Los tratos son bajo tu responsabilidad. Revisa las estrellas y el porcentaje de confianza del vendedor, pide pruebas y, si puedes, usa un <b>intermediario de confianza</b>. Mercado Gamer no guarda dinero ni participa en los pagos.</div>';
+  return '<div class="notice">⚠️ <b>AVISO DE SEGURIDAD:</b> vender o comprar cuentas va contra las reglas de los juegos (Garena, Supercell, Roblox, Steam, Epic Games) y puede llevar al <b>baneo de la cuenta</b>. Los tratos son bajo tu responsabilidad. Revisa las estrellas y el porcentaje de confianza del vendedor, pide pruebas y, si puedes, usa un <b>intermediario de confianza</b>. Mercado Gamer no guarda dinero ni participa en los pagos.</div>';
 }
 
 function gameBadge(game) {
@@ -243,10 +243,11 @@ function bindCards() {
 async function viewHome() {
   app.innerHTML =
     '<section class="hero"><h1>Compra y vende cuentas de juegos</h1>' +
-    '<p>Free Fire, Clash of Clans, Clash Royale y Roblox. Contacto directo por WhatsApp, con reseñas y confianza de cada vendedor.</p>' +
+    '<p>Free Fire, Clash of Clans, Clash Royale, Roblox, Steam, Epic Games, PlayStation, Xbox, Nintendo y más. Contacto directo por WhatsApp, con reseñas y confianza de cada vendedor.</p>' +
     '<div class="cta"><a class="btn" href="#/publicar">➕ Publicar mi cuenta</a>' +
     '<a class="btn ghost" href="#/registro">Crear mi cuenta gratis</a></div></section>' +
     noticeHtml() +
+    (me && me.must_change_password ? '<div class="notice">⚠️ <b>Estás usando una clave temporal.</b> Cámbiala ahora en <a href="#/perfil/' + esc(me.username) + '">tu perfil</a> para seguir usando tu cuenta tranquilo.</div>' : '') +
     '<div class="filters">' +
     '<input id="fQ" type="search" placeholder="🔍 Buscar: ej. cuenta veterana, nivel 70...">' +
     '<select id="fGame"><option value="">Todos los juegos</option>' + GAMES.map(function (g) { return '<option>' + g + '</option>'; }).join('') + '</select>' +
@@ -326,17 +327,21 @@ function viewPublish() {
   app.innerHTML =
     '<form class="form" id="pubForm"><h2>➕ Publicar una cuenta</h2><div id="formErr"></div>' +
     '<div class="field"><label>Título *</label><input name="title" required minlength="3" maxlength="100" placeholder="Ej. Cuenta Free Fire nivel 72, veterana"></div>' +
-    '<div class="field"><label>Juego *</label><select name="game">' + GAMES.map(function (g) { return '<option>' + g + '</option>'; }).join('') + '</select></div>' +
+    '<div class="field"><label>Juego *</label><select name="game" id="pubGame">' + GAMES.map(function (g) { return '<option>' + g + '</option>'; }).join('') + '</select></div>' +
+    '<div class="field" id="gameCustomField" style="display:none"><label>¿Qué juego es? *</label><input name="game_custom" id="gameCustom" maxlength="40" placeholder="Ej. Minecraft, Fortnite, GTA V..."></div>' +
     '<div class="field"><label>Precio *</label><input name="price" type="number" min="1" step="0.01" required placeholder="Ej. 2500"></div>' +
     '<div class="field"><label>Moneda *</label><select name="currency"><option>DOP</option><option>USD</option></select></div>' +
     '<div class="field"><label>URL de la foto (opcional)</label><input name="image_url" type="url" placeholder="https://... (foto de la cuenta)"><small>Si no tienes foto, se muestra un ícono del juego.</small></div>' +
     '<div class="field"><label>Descripción</label><textarea name="description" maxlength="1000" placeholder="Nivel, personajes, skins, armas, por qué la vendes..."></textarea></div>' +
     '<button class="btn" type="submit" style="width:100%">🚀 Publicar ahora</button></form>';
+  document.getElementById('pubGame').addEventListener('change', function (e) {
+    document.getElementById('gameCustomField').style.display = e.target.value === 'Otro' ? '' : 'none';
+  });
   document.getElementById('pubForm').addEventListener('submit', async function (e) {
     e.preventDefault();
     var fd = new FormData(e.target);
     var body = {
-      title: fd.get('title'), game: fd.get('game'),
+      title: fd.get('title'), game: fd.get('game'), game_custom: fd.get('game_custom'),
       price: Number(fd.get('price')), currency: fd.get('currency'),
       description: fd.get('description'), image_url: fd.get('image_url')
     };
@@ -355,15 +360,16 @@ function viewPublish() {
 function viewLogin() {
   app.innerHTML =
     '<form class="form" id="loginForm"><h2>👋 Entrar</h2><div id="formErr"></div>' +
-    '<div class="field"><label>Usuario</label><input name="username" required autocomplete="username"></div>' +
+    '<div class="field"><label>Usuario o correo</label><input name="login" required autocomplete="username" placeholder="tu usuario o tu correo"></div>' +
     '<div class="field"><label>Contraseña</label><input name="password" type="password" required autocomplete="current-password"></div>' +
     '<button class="btn" type="submit" style="width:100%">Entrar</button>' +
-    '<p style="text-align:center;margin-top:12px;color:var(--muted)">¿No tienes cuenta? <a href="#/registro">Crear una gratis</a></p></form>';
+    '<p style="text-align:center;margin-top:12px;color:var(--muted)"><a href="#/olvide-clave">¿Olvidaste tu clave?</a></p>' +
+    '<p style="text-align:center;margin-top:8px;color:var(--muted)">¿No tienes cuenta? <a href="#/registro">Crear una gratis</a></p></form>';
   document.getElementById('loginForm').addEventListener('submit', async function (e) {
     e.preventDefault();
     var fd = new FormData(e.target);
     try {
-      var r = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: fd.get('username'), password: fd.get('password') }) });
+      var r = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ login: fd.get('login'), password: fd.get('password') }) });
       me = r.user;
       renderNav();
       toast('¡Hola de nuevo, ' + me.username + '!');
@@ -374,10 +380,32 @@ function viewLogin() {
   });
 }
 
+function viewForgot() {
+  app.innerHTML =
+    '<form class="form" id="forgotForm"><h2>🔑 Olvidé mi clave</h2><div id="formErr"></div><div id="formOk"></div>' +
+    '<p style="color:var(--muted);font-size:14px;margin-bottom:14px">Escribe tu usuario o correo y el número de WhatsApp con el que te registraste. El administrador revisará que la cuenta es tuya y te pasará una clave temporal por WhatsApp.</p>' +
+    '<div class="field"><label>Usuario o correo *</label><input name="login" required placeholder="tu usuario o tu correo"></div>' +
+    '<div class="field"><label>WhatsApp registrado *</label><input name="whatsapp" required inputmode="tel" placeholder="Ej. 18095551234"></div>' +
+    '<button class="btn" type="submit" style="width:100%">Pedir reseteo de clave</button>' +
+    '<p style="text-align:center;margin-top:12px;color:var(--muted)"><a href="#/login">← Volver a entrar</a></p></form>';
+  document.getElementById('forgotForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var fd = new FormData(e.target);
+    try {
+      var r = await api('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ login: fd.get('login'), whatsapp: fd.get('whatsapp') }) });
+      document.getElementById('formOk').innerHTML = '<div class="ok">' + esc(r.message || 'Solicitud registrada.') + '</div>';
+      document.getElementById('formErr').innerHTML = '';
+    } catch (err) {
+      document.getElementById('formErr').innerHTML = '<div class="err">' + esc(err.message) + '</div>';
+    }
+  });
+}
+
 function viewRegister() {
   app.innerHTML =
     '<form class="form" id="regForm"><h2>🎮 Crear mi cuenta</h2><div id="formErr"></div>' +
     '<div class="field"><label>Usuario *</label><input name="username" required minlength="3" maxlength="20" placeholder="ej. erick_gamer"><small>Solo letras, números y guion bajo. Así te verán los demás.</small></div>' +
+    '<div class="field"><label>Correo electrónico *</label><input name="email" type="email" required maxlength="100" placeholder="ej. tu@correo.com"><small>Para entrar con tu correo y recuperar tu clave si la olvidas. No se muestra en público.</small></div>' +
     '<div class="field"><label>Número de WhatsApp *</label><input name="whatsapp" required inputmode="tel" placeholder="Ej. 18095551234"><small>Con código de país (RD: 1 + 809/829/849). Es el botón de contacto de tus publicaciones.</small></div>' +
     '<div class="field"><label>Contraseña *</label><input name="password" type="password" required minlength="6" autocomplete="new-password" placeholder="Mínimo 6 caracteres"></div>' +
     '<button class="btn" type="submit" style="width:100%">Crear cuenta</button>' +
@@ -386,7 +414,7 @@ function viewRegister() {
     e.preventDefault();
     var fd = new FormData(e.target);
     try {
-      var r = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: fd.get('username'), whatsapp: fd.get('whatsapp'), password: fd.get('password') }) });
+      var r = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: fd.get('username'), email: fd.get('email'), whatsapp: fd.get('whatsapp'), password: fd.get('password') }) });
       me = r.user;
       renderNav();
       toast('¡Cuenta creada! Bienvenido, ' + me.username + '.');
@@ -421,6 +449,31 @@ async function viewProfile(username) {
     '</div><div id="reviewForm"></div></div>';
   app.innerHTML = html;
   bindCards();
+  if (isSelf) {
+    var selfDiv = document.createElement('div');
+    selfDiv.innerHTML =
+      (me.must_change_password ? '<div class="notice" style="margin-top:16px">⚠️ <b>Estás usando una clave temporal.</b> Cámbiala ahora mismo abajo para que solo tú la sepas.</div>' : '') +
+      '<div class="panel" style="margin-top:16px"><h3>🔑 Cambiar mi clave</h3>' +
+      '<div id="pwErr"></div>' +
+      '<div class="field"><label>Clave actual *</label><input id="pwCurrent" type="password" autocomplete="current-password"></div>' +
+      '<div class="field"><label>Clave nueva *</label><input id="pwNew" type="password" minlength="6" autocomplete="new-password" placeholder="Mínimo 6 caracteres"></div>' +
+      '<button class="btn" id="btnChangePw">Cambiar clave</button></div>' +
+      (me.is_admin ? '<div class="panel" style="margin-top:16px"><h3>🔐 Solicitudes de reseteo de clave</h3><p style="color:var(--muted);font-size:14px">Eres el administrador. Cuando alguien olvida su clave, su solicitud aparece aquí. Verifica que el WhatsApp con el que pide coincida con el registrado en su cuenta, o que confirme su correo, antes de aprobar.</p><div id="tempPwBox"></div><div id="adminResets"><p style="color:var(--muted)">Cargando solicitudes…</p></div></div>' : '');
+    app.appendChild(selfDiv);
+    document.getElementById('btnChangePw').onclick = async function () {
+      var cur = document.getElementById('pwCurrent').value;
+      var nw = document.getElementById('pwNew').value;
+      try {
+        await api('/api/auth/change-password', { method: 'POST', body: JSON.stringify({ current_password: cur, new_password: nw }) });
+        toast('¡Clave cambiada!');
+        await refreshMe();
+        viewProfile(u.username);
+      } catch (e) {
+        document.getElementById('pwErr').innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+      }
+    };
+    if (me.is_admin) loadAdminResets();
+  }
   if (!isSelf && me) {
     var mine = null;
     try { mine = (await api('/api/users/' + encodeURIComponent(u.username) + '/my-review')).review; } catch (e) {}
@@ -453,6 +506,52 @@ async function viewProfile(username) {
   }
 }
 
+// ---------- Panel del admin: solicitudes de reseteo ----------
+
+async function loadAdminResets() {
+  var el = document.getElementById('adminResets');
+  if (!el) return;
+  var items;
+  try { items = await api('/api/admin/resets'); }
+  catch (e) { el.innerHTML = '<p class="empty">No se pudieron cargar las solicitudes: ' + esc(e.message) + '</p>'; return; }
+  if (!items.length) { el.innerHTML = '<p style="color:var(--muted)">No hay solicitudes de reseteo.</p>'; return; }
+  el.innerHTML = items.map(function (r) {
+    var match = r.coincide_whatsapp
+      ? '<span class="trust high">✅ WhatsApp coincide</span>'
+      : '<span class="trust low">⚠️ WhatsApp NO coincide</span>';
+    var body = '<div class="review"><span class="who">' + esc(r.username) + '</span> ' + match +
+      ' <span class="when">' + timeAgo(r.created_at) + ' · ' + esc(r.status) + '</span>' +
+      '<p>📧 Correo registrado: <b>' + esc(r.email || 'sin correo') + '</b><br>' +
+      '📱 WhatsApp registrado: <b>+' + esc(r.whatsapp_registrado) + '</b><br>' +
+      '📱 WhatsApp con el que pide: <b>+' + esc(r.whatsapp_contacto) + '</b></p>';
+    if (r.status === 'pendiente') {
+      body += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">' +
+        '<button class="btn small" data-approve="' + r.id + '">✅ Aprobar y generar clave</button>' +
+        '<button class="btn danger small" data-reject="' + r.id + '">❌ Rechazar</button></div>';
+    }
+    return body + '</div>';
+  }).join('');
+  el.querySelectorAll('[data-approve]').forEach(function (b) {
+    b.onclick = async function () {
+      try {
+        var res = await api('/api/admin/resets/' + b.getAttribute('data-approve') + '/approve', { method: 'POST' });
+        document.getElementById('tempPwBox').innerHTML = '<div class="ok"><b>✅ Clave temporal generada. Muéstrala UNA sola vez, no se vuelve a mostrar:</b><br><span style="font-size:26px;font-weight:900;letter-spacing:2px">' + esc(res.temp_password) + '</span><br>Cópiala y pásasela al usuario por WhatsApp. Cuando entre, debe cambiarla en su perfil.</div>';
+        toast('Solicitud aprobada.');
+        loadAdminResets();
+      } catch (e) { toast(e.message); }
+    };
+  });
+  el.querySelectorAll('[data-reject]').forEach(function (b) {
+    b.onclick = async function () {
+      try {
+        await api('/api/admin/resets/' + b.getAttribute('data-reject') + '/reject', { method: 'POST' });
+        toast('Solicitud rechazada.');
+        loadAdminResets();
+      } catch (e) { toast(e.message); }
+    };
+  });
+}
+
 // ---------- Router ----------
 
 function route() {
@@ -463,6 +562,7 @@ function route() {
   if (page === 'publicacion' && parts[1]) return viewDetail(Number(parts[1]));
   if (page === 'publicar') return viewPublish();
   if (page === 'login') return viewLogin();
+  if (page === 'olvide-clave') return viewForgot();
   if (page === 'registro') return viewRegister();
   if (page === 'perfil' && parts[1]) return viewProfile(decodeURIComponent(parts[1]));
   app.innerHTML = '<p class="empty">Página no encontrada.</p><p style="text-align:center"><a href="#/">← Volver al inicio</a></p>';

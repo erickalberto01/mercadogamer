@@ -1,8 +1,9 @@
 # 🎮 Mercado Gamer
 
 Página pública para comprar y vender cuentas de juegos (Free Fire, Clash of
-Clans, Clash Royale, Roblox y otros), con contacto directo por WhatsApp,
-login propio, reseñas con estrellas y porcentaje de confianza del vendedor.
+Clans, Clash Royale, Roblox, Steam, Epic Games, PlayStation, Xbox, Nintendo
+y otros), con contacto directo por WhatsApp, login propio con correo,
+reseñas con estrellas y porcentaje de confianza del vendedor.
 
 Hecha para el grupo de Facebook **"Cambio Y Ventas De Cuenta Clash of Clans
 Y Clash Royale Y Cualquier Juego"** (7,000 miembros, administrado por Erick).
@@ -17,10 +18,23 @@ Y Clash Royale Y Cualquier Juego"** (7,000 miembros, administrado por Erick).
   (`wa.me/<número del vendedor>`). Estado activa/vendida (el vendedor la
   marca). Contador de visualizaciones por publicación: sube al abrir el
   detalle y no se infla con recargas (cookie por publicación, 24 h).
-- **Login propio:** registro e inicio de sesión con usuario + contraseña.
+- **Login propio:** registro e inicio de sesión con usuario o correo +
+  contraseña. El registro pide correo electrónico (obligatorio y único).
   La contraseña se guarda como hash **SHA-256 con sal aleatoria**, nunca en
   texto plano. Sesión con cookie `httpOnly` y token aleatorio en D1 que
   vence a los 30 días. Cada usuario tiene su número de WhatsApp en el perfil.
+- **Olvidé mi clave (revisión manual, sin correo):** el usuario pide el
+  reseteo con su usuario o correo y su WhatsApp. El primer usuario
+  registrado es el **admin** (Erick) y ve las solicitudes en su perfil, con
+  el correo y WhatsApp registrados de la cuenta para verificar que quien
+  pide es el dueño (el WhatsApp de la solicitud debe coincidir con el
+  registrado). Al aprobar, se genera una **clave temporal** que se muestra
+  UNA sola vez al admin, que se la pasa al usuario por WhatsApp; al entrar,
+  el usuario debe cambiarla en su perfil ("Cambiar mi clave", pide la
+  clave actual + la nueva). Al aprobar se cierran las sesiones de esa cuenta.
+- **Juegos:** Free Fire, Clash of Clans, Clash Royale, Roblox, Steam, Epic
+  Games, PlayStation, Xbox, Nintendo y Otro (con campo de texto libre para
+  escribir el juego). El filtro "Otro" muestra los juegos personalizados.
 - **Reseñas y confianza:** un usuario con sesión puede dejar una reseña
   (1–5 estrellas + comentario) a otro usuario. Una reseña por pareja
   (se puede actualizar). El perfil muestra: estrellas promedio,
@@ -29,8 +43,9 @@ Y Clash Royale Y Cualquier Juego"** (7,000 miembros, administrado por Erick).
   también en cada publicación y en el detalle.
 - **Portada:** buscador, filtro por juego, orden por más vistas o recientes.
   Aviso visible de seguridad: vender cuentas va contra las reglas de los
-  juegos (Garena, Supercell, Roblox) y puede llevar a baneo; los tratos son
-  bajo responsabilidad de cada uno; se recomienda intermediario de confianza.
+  juegos (Garena, Supercell, Roblox, Steam, Epic Games) y puede llevar a
+  baneo; los tratos son bajo responsabilidad de cada uno; se recomienda
+  intermediario de confianza.
 - Diseño gaming oscuro con neón, mobile-first, todo en español.
 
 ## Arquitectura
@@ -66,6 +81,11 @@ Igual que la página de códigos Roblox de Erick:
 | `/api/auth/login` | POST | Entra y crea sesión (cookie `mg_session`). |
 | `/api/auth/logout` | POST | Cierra sesión. |
 | `/api/auth/me` | GET | Usuario actual o `null`. |
+| `/api/auth/forgot-password` | POST | Crea solicitud de reseteo (login + whatsapp). Límite: 5 intentos por IP cada 10 min. |
+| `/api/auth/change-password` | POST | Cambia la clave (sesión; clave actual + nueva). |
+| `/api/admin/resets` | GET | Lista solicitudes de reseteo (solo admin). |
+| `/api/admin/resets/:id/approve` | POST | Aprueba: genera clave temporal (solo admin; se muestra una sola vez). |
+| `/api/admin/resets/:id/reject` | POST | Rechaza la solicitud (solo admin). |
 | `/api/listings` | GET | Lista publicaciones activas (`?game=&q=&sort=recent\|views`). |
 | `/api/listings` | POST | Crea publicación (sesión). |
 | `/api/listings/:id` | GET | Detalle (+1 vista si no hay cookie). |
@@ -120,8 +140,10 @@ de usuarios se escapan en el frontend (sin HTML inyectado).
 - Pon el link en el grupo de Facebook: descripción del grupo + un post
   fijado (Facebook esconde los posts normales con links).
 - Erick es admin del grupo, pero en la página cualquier usuario registrado
-  puede publicar; Erick puede registrarse como cualquier usuario (por
-  ejemplo `erickromanp`) y sus publicaciones mostrarán su confianza.
+  puede publicar; Erick debe registrarse como el **primer usuario** de la
+  página (por ejemplo `erickromanp`) para quedar como **admin**
+  automáticamente y poder aprobar los reseteos de clave. Si ya hay usuarios
+  registrados y ninguno es admin, el más antiguo queda como admin solo.
 - **No hay panel de moderación en v1:** si una publicación es falsa o
   engañosa, se borra directo en la base D1 desde el panel de Cloudflare
   (D1 → `mercadogamer` → Console → `DELETE FROM listings WHERE id = X;`).
@@ -132,6 +154,7 @@ de usuarios se escapan en el frontend (sin HTML inyectado).
 - Las sesiones son tokens aleatorios de 32 bytes con expiración.
 - Los tratos y pagos ocurren fuera de la página (WhatsApp); la página no
   guarda dinero ni participa en los pagos.
-- Vender cuentas de juegos viola las reglas de Garena, Supercell y Roblox:
+- Vender cuentas de juegos viola las reglas de Garena, Supercell, Roblox,
+  Steam y Epic Games:
   la página lo avisa en portada y en cada detalle, pero no puede evitar
   un baneo por parte del juego.

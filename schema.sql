@@ -12,10 +12,23 @@
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
+  email TEXT,
   password_hash TEXT NOT NULL,
   salt TEXT NOT NULL,
   whatsapp TEXT NOT NULL,
+  is_admin INTEGER NOT NULL DEFAULT 0,
+  must_change_password INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
+);
+
+-- Solicitudes de reseteo de clave (revisión manual por el admin).
+CREATE TABLE IF NOT EXISTS password_resets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  whatsapp_contacto TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pendiente',
+  created_at INTEGER NOT NULL,
+  resolved_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS listings (
@@ -59,3 +72,6 @@ CREATE INDEX IF NOT EXISTS idx_listings_created ON listings (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_listings_views ON listings (views DESC);
 CREATE INDEX IF NOT EXISTS idx_reviews_reviewed ON reviews (reviewed_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_resets_user ON password_resets (user_id);
+CREATE INDEX IF NOT EXISTS idx_resets_status ON password_resets (status);

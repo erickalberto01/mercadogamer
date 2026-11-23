@@ -3,9 +3,9 @@
 // y las sesiones viven en D1. Nunca se escribe una contraseña en texto plano.
 //
 // Tablas D1 (se crean solas en la primera llamada a /api/, ver ensureSchema
-// y schema.sql): users, listings, reviews, sessions, throttle.
+// y schema.sql): users, listings, reviews, sessions, throttle, password_resets.
 
-var GAMES = ['Free Fire', 'Clash of Clans', 'Clash Royale', 'Roblox', 'Otro'];
+var GAMES = ['Free Fire', 'Clash of Clans', 'Clash Royale', 'Roblox', 'Steam', 'Epic Games', 'PlayStation', 'Xbox', 'Nintendo', 'Otro'];
 var SESSION_DAYS = 30;
 var LOGIN_WINDOW_MS = 10 * 60 * 1000;
 var LOGIN_MAX_ATTEMPTS = 10;
@@ -79,6 +79,20 @@ function publicUser(row) {
   };
 }
 
+// Datos del usuario para su propia sesión (incluye correo y si es admin).
+function sessionUserJson(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    username: row.username,
+    whatsapp: row.whatsapp,
+    email: row.email || null,
+    is_admin: row.is_admin ? 1 : 0,
+    must_change_password: row.must_change_password ? 1 : 0,
+    created_at: row.created_at,
+  };
+}
+
 async function getSessionUser(request, env) {
   var cookies = parseCookies(request);
   var token = cookies.mg_session;
@@ -94,7 +108,7 @@ async function getSessionUser(request, env) {
     return null;
   }
   var user = await env.DB.prepare(
-    'SELECT id, username, whatsapp, created_at FROM users WHERE id = ?',
+    'SELECT id, username, whatsapp, email, is_admin, must_change_password, created_at FROM users WHERE id = ?',
   ).bind(session.user_id).first();
   return user || null;
 }
@@ -125,14 +139,45 @@ async function ensureSchema(env) {
     'CREATE TABLE IF NOT EXISTS reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, reviewer_id INTEGER NOT NULL, reviewed_id INTEGER NOT NULL, stars INTEGER NOT NULL, comment TEXT, created_at INTEGER NOT NULL, UNIQUE(reviewer_id, reviewed_id))',
     'CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL)',
     'CREATE TABLE IF NOT EXISTS throttle (key TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL)',
+    "CREATE TABLE IF NOT EXISTS password_resets (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, whatsapp_contacto TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pendiente', created_at INTEGER NOT NULL, resolved_at INTEGER)",
     'CREATE INDEX IF NOT EXISTS idx_listings_game ON listings (game)',
     'CREATE INDEX IF NOT EXISTS idx_listings_created ON listings (created_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_listings_views ON listings (views DESC)',
     'CREATE INDEX IF NOT EXISTS idx_reviews_reviewed ON reviews (reviewed_id)',
     'CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_resets_user ON password_resets (user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_resets_status ON password_resets (status)',
   ];
   for (var i = 0; i < statements.length; i++) {
     await env.DB.prepare(statements[i]).run();
+  }
+  // Migración v2 (sin borrar datos): columnas nuevas en users.
+  await addColumnIfMissing(env, 'users', 'email', 'TEXT');
+  await addColumnIfMissing(env, 'users', 'is_admin', 'INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(env, 'users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0');
+  // El primer usuario registrado es el admin (Erick).
+  await env.DB.prepare(
+    'UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users) AND NOT EXISTS (SELECT 1 FROM users WHERE is_admin = 1)',
+  ).run();
+  try {
+    await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email)').run();
+  } catch (e) { /* si ya hay correos duplicados el índice no se crea; el registro igual valida unicidad */ }
+}
+
+// Agrega una columna solo si falta. Si no se puede leer el esquema,
+// intenta el ALTER directo y se ignora el error si la columna ya existe.
+async function addColumnIfMissing(env, table, column, def) {
+  try {
+    var cols = await env.DB.prepare("SELECT name FROM pragma_table_info('" + table + "')").all();
+    var found = false;
+    (cols.results || []).forEach(function (r) { if (r.name === column) found = true; });
+    if (!found) {
+      await env.DB.prepare('ALTER TABLE ' + table + ' ADD COLUMN ' + column + ' ' + def).run();
+    }
+  } catch (e) {
+    try {
+      await env.DB.prepare('ALTER TABLE ' + table + ' ADD COLUMN ' + column + ' ' + def).run();
+    } catch (e2) {}
   }
 }
 
@@ -157,10 +202,14 @@ async function register(request, env) {
   var data = await readJson(request);
   if (!data) return json({ error: 'El cuerpo debe ser JSON válido.' }, 400);
   var username = typeof data.username === 'string' ? data.username.trim().toLowerCase() : '';
+  var email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
   var password = typeof data.password === 'string' ? data.password : '';
   var whatsapp = digitsOnly(data.whatsapp);
   if (!/^[a-z0-9_]{3,20}$/.test(username)) {
     return json({ error: 'El usuario debe tener de 3 a 20 caracteres: letras, números o guion bajo.' }, 400);
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 100) {
+    return json({ error: 'Escribe un correo electrónico válido.' }, 400);
   }
   if (password.length < 6 || password.length > 100) {
     return json({ error: 'La contraseña debe tener al menos 6 caracteres.' }, 400);
@@ -172,14 +221,16 @@ async function register(request, env) {
   if (!await throttleCheck(env, 'register:' + ipHash, LOGIN_WINDOW_MS, LOGIN_MAX_ATTEMPTS)) {
     return json({ error: 'Demasiados intentos. Espera 10 minutos.' }, 429);
   }
-  var existing = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
-  if (existing) return json({ error: 'Ese nombre de usuario ya está en uso.' }, 409);
+  var existing = await env.DB.prepare('SELECT id FROM users WHERE username = ? OR email = ?').bind(username, email).first();
+  if (existing) return json({ error: 'Ese nombre de usuario o correo ya está en uso.' }, 409);
   var salt = randomHex(16);
   var hash = await sha256Hex(salt + ':' + password);
   var now = Date.now();
+  var countRow = await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first();
+  var isAdmin = countRow && countRow.n === 0 ? 1 : 0;
   var inserted = await env.DB.prepare(
-    'INSERT INTO users (username, password_hash, salt, whatsapp, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(username, hash, salt, whatsapp, now).run();
+    'INSERT INTO users (username, email, password_hash, salt, whatsapp, is_admin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).bind(username, email, hash, salt, whatsapp, isAdmin, now).run();
   var userId = inserted.meta && inserted.meta.last_row_id;
   return loginWithUser(env, userId, now);
 }
@@ -191,10 +242,10 @@ async function loginWithUser(env, userId, now) {
     'INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)',
   ).bind(token, userId, expiresAt).run();
   var user = await env.DB.prepare(
-    'SELECT id, username, whatsapp, created_at FROM users WHERE id = ?',
+    'SELECT id, username, whatsapp, email, is_admin, must_change_password, created_at FROM users WHERE id = ?',
   ).bind(userId).first();
   return json(
-    { ok: true, user: { id: user.id, username: user.username, whatsapp: user.whatsapp } },
+    { ok: true, user: sessionUserJson(user) },
     200,
     { 'Set-Cookie': sessionCookie(token, SESSION_DAYS * 24 * 60 * 60) },
   );
@@ -203,15 +254,16 @@ async function loginWithUser(env, userId, now) {
 async function login(request, env) {
   var data = await readJson(request);
   if (!data) return json({ error: 'El cuerpo debe ser JSON válido.' }, 400);
-  var username = typeof data.username === 'string' ? data.username.trim().toLowerCase() : '';
+  var loginId = typeof data.login === 'string' ? data.login.trim().toLowerCase()
+    : (typeof data.username === 'string' ? data.username.trim().toLowerCase() : '');
   var password = typeof data.password === 'string' ? data.password : '';
   var ipHash = await sha256Hex(getClientIp(request));
   if (!await throttleCheck(env, 'login:' + ipHash, LOGIN_WINDOW_MS, LOGIN_MAX_ATTEMPTS)) {
     return json({ error: 'Demasiados intentos. Espera 10 minutos.' }, 429);
   }
   var user = await env.DB.prepare(
-    'SELECT id, username, password_hash, salt, whatsapp FROM users WHERE username = ?',
-  ).bind(username).first();
+    'SELECT id, username, password_hash, salt, whatsapp FROM users WHERE username = ? OR email = ?',
+  ).bind(loginId, loginId).first();
   if (!user) return json({ error: 'Usuario o contraseña incorrectos.' }, 401);
   var hash = await sha256Hex(user.salt + ':' + password);
   if (hash !== user.password_hash) return json({ error: 'Usuario o contraseña incorrectos.' }, 401);
@@ -230,7 +282,124 @@ async function logout(request, env) {
 async function me(request, env) {
   var user = await getSessionUser(request, env);
   if (!user) return json({ user: null }, 200);
-  return json({ user: { id: user.id, username: user.username, whatsapp: user.whatsapp } }, 200);
+  return json({ user: sessionUserJson(user) }, 200);
+}
+
+// ---------- Reseteo de clave (revisión manual por el admin) ----------
+
+async function changePassword(request, env) {
+  var user = await getSessionUser(request, env);
+  if (!user) return json({ error: 'Inicia sesión.' }, 401);
+  var data = await readJson(request);
+  if (!data) return json({ error: 'El cuerpo debe ser JSON válido.' }, 400);
+  var current = typeof data.current_password === 'string' ? data.current_password : '';
+  var next = typeof data.new_password === 'string' ? data.new_password : '';
+  if (next.length < 6 || next.length > 100) {
+    return json({ error: 'La contraseña nueva debe tener al menos 6 caracteres.' }, 400);
+  }
+  var row = await env.DB.prepare('SELECT password_hash, salt FROM users WHERE id = ?').bind(user.id).first();
+  if (!row) return json({ error: 'Tu cuenta no existe.' }, 404);
+  var hash = await sha256Hex(row.salt + ':' + current);
+  if (hash !== row.password_hash) return json({ error: 'La contraseña actual no es correcta.' }, 401);
+  var salt = randomHex(16);
+  var newHash = await sha256Hex(salt + ':' + next);
+  await env.DB.prepare('UPDATE users SET password_hash = ?, salt = ?, must_change_password = 0 WHERE id = ?').bind(newHash, salt, user.id).run();
+  await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id).run();
+  return loginWithUser(env, user.id, Date.now());
+}
+
+async function forgotPassword(request, env) {
+  var data = await readJson(request);
+  if (!data) return json({ error: 'El cuerpo debe ser JSON válido.' }, 400);
+  var loginId = typeof data.login === 'string' ? data.login.trim().toLowerCase() : '';
+  var whatsapp = digitsOnly(data.whatsapp);
+  if (!loginId || whatsapp.length < 7 || whatsapp.length > 15) {
+    return json({ error: 'Escribe tu usuario o correo y tu número de WhatsApp.' }, 400);
+  }
+  var ipHash = await sha256Hex(getClientIp(request));
+  if (!await throttleCheck(env, 'forgot:' + ipHash, LOGIN_WINDOW_MS, 5)) {
+    return json({ error: 'Demasiados intentos. Espera 10 minutos.' }, 429);
+  }
+  var user = await env.DB.prepare('SELECT id FROM users WHERE username = ? OR email = ?').bind(loginId, loginId).first();
+  if (user) {
+    var pending = await env.DB.prepare("SELECT id FROM password_resets WHERE user_id = ? AND status = 'pendiente'").bind(user.id).first();
+    var now = Date.now();
+    if (pending) {
+      await env.DB.prepare('UPDATE password_resets SET whatsapp_contacto = ?, created_at = ? WHERE id = ?').bind(whatsapp, now, pending.id).run();
+    } else {
+      await env.DB.prepare("INSERT INTO password_resets (user_id, whatsapp_contacto, status, created_at) VALUES (?, ?, 'pendiente', ?)").bind(user.id, whatsapp, now).run();
+    }
+  }
+  // Respuesta genérica para no revelar si la cuenta existe.
+  return json({ ok: true, message: 'Si la cuenta existe, tu solicitud quedó registrada. El administrador la revisará y te escribirá por WhatsApp para verificar que eres el dueño.' }, 200);
+}
+
+async function requireAdmin(request, env) {
+  var user = await getSessionUser(request, env);
+  if (!user) return { error: json({ error: 'Inicia sesión.' }, 401) };
+  if (!user.is_admin) return { error: json({ error: 'Solo el administrador puede hacer esto.' }, 403) };
+  return { user: user };
+}
+
+function tempPassword() {
+  // 8 caracteres, sin caracteres confusos (0/O, 1/l).
+  var chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  var arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
+  var out = '';
+  for (var i = 0; i < 8; i++) out += chars[arr[i] % chars.length];
+  return out;
+}
+
+async function listResets(request, env) {
+  var auth = await requireAdmin(request, env);
+  if (auth.error) return auth.error;
+  var rows = await env.DB.prepare(
+    'SELECT pr.id, pr.user_id, pr.whatsapp_contacto, pr.status, pr.created_at, pr.resolved_at, ' +
+    'u.username, u.email, u.whatsapp AS whatsapp_registrado ' +
+    'FROM password_resets pr JOIN users u ON u.id = pr.user_id ' +
+    "ORDER BY CASE WHEN pr.status = 'pendiente' THEN 0 ELSE 1 END, pr.created_at DESC, pr.id DESC LIMIT 50",
+  ).all();
+  return json((rows.results || []).map(function (r) {
+    return {
+      id: r.id,
+      user_id: r.user_id,
+      username: r.username,
+      email: r.email,
+      whatsapp_registrado: r.whatsapp_registrado,
+      whatsapp_contacto: r.whatsapp_contacto,
+      coincide_whatsapp: r.whatsapp_contacto === r.whatsapp_registrado,
+      status: r.status,
+      created_at: r.created_at,
+      resolved_at: r.resolved_at,
+    };
+  }), 200);
+}
+
+async function approveReset(request, env, id) {
+  var auth = await requireAdmin(request, env);
+  if (auth.error) return auth.error;
+  var row = await env.DB.prepare('SELECT * FROM password_resets WHERE id = ?').bind(id).first();
+  if (!row) return json({ error: 'La solicitud no existe.' }, 404);
+  if (row.status !== 'pendiente') return json({ error: 'Esa solicitud ya fue resuelta.' }, 400);
+  var temp = tempPassword();
+  var salt = randomHex(16);
+  var hash = await sha256Hex(salt + ':' + temp);
+  var now = Date.now();
+  await env.DB.prepare('UPDATE users SET password_hash = ?, salt = ?, must_change_password = 1 WHERE id = ?').bind(hash, salt, row.user_id).run();
+  await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(row.user_id).run();
+  await env.DB.prepare("UPDATE password_resets SET status = 'aprobada', resolved_at = ? WHERE id = ?").bind(now, id).run();
+  return json({ ok: true, temp_password: temp }, 200);
+}
+
+async function rejectReset(request, env, id) {
+  var auth = await requireAdmin(request, env);
+  if (auth.error) return auth.error;
+  var row = await env.DB.prepare('SELECT * FROM password_resets WHERE id = ?').bind(id).first();
+  if (!row) return json({ error: 'La solicitud no existe.' }, 404);
+  if (row.status !== 'pendiente') return json({ error: 'Esa solicitud ya fue resuelta.' }, 400);
+  await env.DB.prepare("UPDATE password_resets SET status = 'rechazada', resolved_at = ? WHERE id = ?").bind(Date.now(), id).run();
+  return json({ ok: true }, 200);
 }
 
 // ---------- Listings ----------
@@ -275,7 +444,11 @@ async function listListings(request, env) {
   var sort = url.searchParams.get('sort') === 'views' ? 'views' : 'recent';
   var conditions = ["l.status = 'activa'"];
   var params = [];
-  if (game && GAMES.indexOf(game) >= 0) {
+  if (game === 'Otro') {
+    // "Otro" = juegos personalizados (no están en la lista fija).
+    conditions.push('l.game NOT IN (' + GAMES.slice(0, -1).map(function () { return '?'; }).join(',') + ')');
+    GAMES.slice(0, -1).forEach(function (g) { params.push(g); });
+  } else if (game && GAMES.indexOf(game) >= 0) {
     conditions.push('l.game = ?');
     params.push(game);
   }
@@ -320,7 +493,13 @@ async function createListing(request, env) {
   if (title.length < 3 || title.length > 100) {
     return json({ error: 'El título debe tener entre 3 y 100 caracteres.' }, 400);
   }
-  if (GAMES.indexOf(game) < 0) {
+  var gameCustom = typeof data.game_custom === 'string' ? data.game_custom.trim() : '';
+  if (game === 'Otro') {
+    if (gameCustom.length < 2 || gameCustom.length > 40) {
+      return json({ error: 'Escribe el nombre del juego (de 2 a 40 caracteres).' }, 400);
+    }
+    game = gameCustom;
+  } else if (GAMES.indexOf(game) < 0) {
     return json({ error: 'Elige un juego de la lista.' }, 400);
   }
   if (!isFinite(price) || price <= 0 || price > 1000000) {
@@ -435,6 +614,18 @@ export default {
       if (path === '/api/auth/login' && request.method === 'POST') return login(request, env);
       if (path === '/api/auth/logout' && request.method === 'POST') return logout(request, env);
       if (path === '/api/auth/me' && request.method === 'GET') return me(request, env);
+      if (path === '/api/auth/forgot-password' && request.method === 'POST') return forgotPassword(request, env);
+      if (path === '/api/auth/change-password' && request.method === 'POST') return changePassword(request, env);
+
+      if (path === '/api/admin/resets' && request.method === 'GET') return listResets(request, env);
+      if (path.startsWith('/api/admin/resets/') && request.method === 'POST') {
+        var resetParts = path.slice('/api/admin/resets/'.length).split('/');
+        var resetId = Number(resetParts[0]);
+        if (!Number.isInteger(resetId) || resetId <= 0) return json({ error: 'La solicitud no existe.' }, 404);
+        if (resetParts[1] === 'approve') return approveReset(request, env, resetId);
+        if (resetParts[1] === 'reject') return rejectReset(request, env, resetId);
+        return json({ error: 'Ruta no encontrada.' }, 404);
+      }
 
       if (path === '/api/listings' && request.method === 'GET') return listListings(request, env);
       if (path === '/api/listings' && request.method === 'POST') return createListing(request, env);
