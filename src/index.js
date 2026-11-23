@@ -205,6 +205,9 @@ async function register(request, env) {
   var email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
   var password = typeof data.password === 'string' ? data.password : '';
   var whatsapp = digitsOnly(data.whatsapp);
+  // El frontend ya manda el número con el código del país (ej. 1809...),
+  // pero por si llega con prefijo internacional 00 se quita aquí también.
+  if (whatsapp.indexOf('00') === 0) whatsapp = whatsapp.slice(2);
   if (!/^[a-z0-9_]{3,20}$/.test(username)) {
     return json({ error: 'El usuario debe tener de 3 a 20 caracteres: letras, números o guion bajo.' }, 400);
   }
@@ -214,7 +217,7 @@ async function register(request, env) {
   if (password.length < 6 || password.length > 100) {
     return json({ error: 'La contraseña debe tener al menos 6 caracteres.' }, 400);
   }
-  if (whatsapp.length < 7 || whatsapp.length > 15) {
+  if (whatsapp.length < 8 || whatsapp.length > 15) {
     return json({ error: 'Escribe un número de WhatsApp válido (solo dígitos, con código de país).' }, 400);
   }
   var ipHash = await sha256Hex(getClientIp(request));
@@ -313,7 +316,8 @@ async function forgotPassword(request, env) {
   if (!data) return json({ error: 'El cuerpo debe ser JSON válido.' }, 400);
   var loginId = typeof data.login === 'string' ? data.login.trim().toLowerCase() : '';
   var whatsapp = digitsOnly(data.whatsapp);
-  if (!loginId || whatsapp.length < 7 || whatsapp.length > 15) {
+  if (whatsapp.indexOf('00') === 0) whatsapp = whatsapp.slice(2);
+  if (!loginId || whatsapp.length < 8 || whatsapp.length > 15) {
     return json({ error: 'Escribe tu usuario o correo y tu número de WhatsApp.' }, 400);
   }
   var ipHash = await sha256Hex(getClientIp(request));

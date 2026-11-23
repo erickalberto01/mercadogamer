@@ -74,6 +74,9 @@ main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
 .field input,.field select,.field textarea{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--text);padding:12px 14px;border-radius:12px;font-size:15px;outline:none}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--neon2);box-shadow:0 0 0 2px rgba(34,211,238,.25)}
 .field small{color:var(--muted);font-size:12px}
+.phone-row{display:flex;gap:8px}
+.phone-row select{flex:0 0 47%;min-width:0}
+.phone-row input{flex:1;min-width:0}
 .field textarea{min-height:110px;resize:vertical}
 .err{background:rgba(248,113,113,.15);border:1px solid var(--red);color:#fecaca;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px}
 .ok{background:rgba(34,255,136,.12);border:1px solid var(--neon);color:#bbf7d0;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px}
@@ -109,6 +112,65 @@ footer a{color:var(--muted)}
 <script>
 'use strict';
 var GAMES = ['Free Fire', 'Clash of Clans', 'Clash Royale', 'Roblox', 'Steam', 'Epic Games', 'PlayStation', 'Xbox', 'Nintendo', 'Otro'];
+var COUNTRIES = [
+  { code: '1', name: 'República Dominicana', flag: '🇩🇴' },
+  { code: '1', name: 'Estados Unidos', flag: '🇺🇸' },
+  { code: '1', name: 'Puerto Rico', flag: '🇵🇷' },
+  { code: '51', name: 'Perú', flag: '🇵🇪' },
+  { code: '52', name: 'México', flag: '🇲🇽' },
+  { code: '57', name: 'Colombia', flag: '🇨🇴' },
+  { code: '54', name: 'Argentina', flag: '🇦🇷' },
+  { code: '56', name: 'Chile', flag: '🇨🇱' },
+  { code: '34', name: 'España', flag: '🇪🇸' },
+  { code: '58', name: 'Venezuela', flag: '🇻🇪' },
+  { code: '593', name: 'Ecuador', flag: '🇪🇨' },
+  { code: '502', name: 'Guatemala', flag: '🇬🇹' },
+  { code: '503', name: 'El Salvador', flag: '🇸🇻' },
+  { code: '504', name: 'Honduras', flag: '🇭🇳' },
+  { code: '505', name: 'Nicaragua', flag: '🇳🇮' },
+  { code: '506', name: 'Costa Rica', flag: '🇨🇷' },
+  { code: '507', name: 'Panamá', flag: '🇵🇦' },
+  { code: '591', name: 'Bolivia', flag: '🇧🇴' },
+  { code: '595', name: 'Paraguay', flag: '🇵🇾' },
+  { code: '598', name: 'Uruguay', flag: '🇺🇾' },
+  { code: '55', name: 'Brasil', flag: '🇧🇷' },
+  { code: '53', name: 'Cuba', flag: '🇨🇺' },
+  { code: '509', name: 'Haití', flag: '🇭🇹' },
+  { code: '501', name: 'Belice', flag: '🇧🇿' },
+  { code: '1876', name: 'Jamaica', flag: '🇯🇲' }
+];
+
+function countryOptionsHtml() {
+  return COUNTRIES.map(function (c, i) {
+    return '<option value="' + i + '"' + (i === 0 ? ' selected' : '') + '>' + c.flag + ' ' + c.name + ' (+' + c.code + ')</option>';
+  }).join('');
+}
+
+// Normaliza un número de WhatsApp con el código del país elegido:
+// quita espacios/guiones, quita el prefijo internacional 00, y no duplica
+// el código si el usuario ya lo escribió (ej. RD +1 y escribe 18095551234).
+function normalizePhone(countryCode, raw) {
+  var digits = String(raw || '').replace(/\D/g, '');
+  if (digits.indexOf('00') === 0) digits = digits.slice(2);
+  if (digits.indexOf(countryCode) === 0) digits = digits.slice(countryCode.length);
+  return countryCode + digits;
+}
+
+// Mantiene el prefijo "+código" visible en el campo al cambiar de país.
+function bindPhoneRow(selectEl, inputEl) {
+  function applyPrefix() {
+    var code = COUNTRIES[Number(selectEl.value)].code;
+    var v = inputEl.value || '';
+    var digits = v.replace(/\D/g, '');
+    var oldCode = inputEl.getAttribute('data-code') || '';
+    if (oldCode && digits.indexOf(oldCode) === 0) digits = digits.slice(oldCode.length);
+    inputEl.value = '+' + code + (digits ? ' ' + digits : ' ');
+    inputEl.setAttribute('data-code', code);
+  }
+  selectEl.addEventListener('change', applyPrefix);
+  inputEl.setAttribute('data-code', COUNTRIES[Number(selectEl.value)].code);
+  if (!inputEl.value) inputEl.value = '+' + COUNTRIES[0].code + ' ';
+}
 var app = document.getElementById('app');
 var navUser = document.getElementById('navUser');
 var me = null; // {id, username, whatsapp} o null
@@ -385,14 +447,24 @@ function viewForgot() {
     '<form class="form" id="forgotForm"><h2>🔑 Olvidé mi clave</h2><div id="formErr"></div><div id="formOk"></div>' +
     '<p style="color:var(--muted);font-size:14px;margin-bottom:14px">Escribe tu usuario o correo y el número de WhatsApp con el que te registraste. El administrador revisará que la cuenta es tuya y te pasará una clave temporal por WhatsApp.</p>' +
     '<div class="field"><label>Usuario o correo *</label><input name="login" required placeholder="tu usuario o tu correo"></div>' +
-    '<div class="field"><label>WhatsApp registrado *</label><input name="whatsapp" required inputmode="tel" placeholder="Ej. 18095551234"></div>' +
+    '<div class="field"><label>WhatsApp registrado *</label><div class="phone-row">' +
+    '<select id="forgotCountry">' + countryOptionsHtml() + '</select>' +
+    '<input id="forgotPhone" name="whatsapp" required inputmode="tel" placeholder="809 555 1234"></div>' +
+    '<small>Elige tu país y escribe el número con el que te registraste.</small></div>' +
     '<button class="btn" type="submit" style="width:100%">Pedir reseteo de clave</button>' +
     '<p style="text-align:center;margin-top:12px;color:var(--muted)"><a href="#/login">← Volver a entrar</a></p></form>';
+  bindPhoneRow(document.getElementById('forgotCountry'), document.getElementById('forgotPhone'));
   document.getElementById('forgotForm').addEventListener('submit', async function (e) {
     e.preventDefault();
     var fd = new FormData(e.target);
+    var code = COUNTRIES[Number(document.getElementById('forgotCountry').value)].code;
+    var full = normalizePhone(code, document.getElementById('forgotPhone').value);
+    if (full.length - code.length < 7 || full.length > 15) {
+      document.getElementById('formErr').innerHTML = '<div class="err">Escribe un número de WhatsApp válido (mínimo 7 dígitos después del código de tu país).</div>';
+      return;
+    }
     try {
-      var r = await api('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ login: fd.get('login'), whatsapp: fd.get('whatsapp') }) });
+      var r = await api('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ login: fd.get('login'), whatsapp: full }) });
       document.getElementById('formOk').innerHTML = '<div class="ok">' + esc(r.message || 'Solicitud registrada.') + '</div>';
       document.getElementById('formErr').innerHTML = '';
     } catch (err) {
@@ -406,15 +478,25 @@ function viewRegister() {
     '<form class="form" id="regForm"><h2>🎮 Crear mi cuenta</h2><div id="formErr"></div>' +
     '<div class="field"><label>Usuario *</label><input name="username" required minlength="3" maxlength="20" placeholder="ej. erick_gamer"><small>Solo letras, números y guion bajo. Así te verán los demás.</small></div>' +
     '<div class="field"><label>Correo electrónico *</label><input name="email" type="email" required maxlength="100" placeholder="ej. tu@correo.com"><small>Para entrar con tu correo y recuperar tu clave si la olvidas. No se muestra en público.</small></div>' +
-    '<div class="field"><label>Número de WhatsApp *</label><input name="whatsapp" required inputmode="tel" placeholder="Ej. 18095551234"><small>Con código de país (RD: 1 + 809/829/849). Es el botón de contacto de tus publicaciones.</small></div>' +
+    '<div class="field"><label>País y número de WhatsApp *</label><div class="phone-row">' +
+    '<select id="regCountry">' + countryOptionsHtml() + '</select>' +
+    '<input id="regPhone" name="whatsapp" required inputmode="tel" placeholder="809 555 1234"></div>' +
+    '<small>Elige tu país y escribe tu número. Se guarda con el código (ej. +1809...). Es el botón de contacto de tus publicaciones.</small></div>' +
     '<div class="field"><label>Contraseña *</label><input name="password" type="password" required minlength="6" autocomplete="new-password" placeholder="Mínimo 6 caracteres"></div>' +
     '<button class="btn" type="submit" style="width:100%">Crear cuenta</button>' +
     '<p style="text-align:center;margin-top:12px;color:var(--muted)">¿Ya tienes cuenta? <a href="#/login">Entrar</a></p></form>';
+  bindPhoneRow(document.getElementById('regCountry'), document.getElementById('regPhone'));
   document.getElementById('regForm').addEventListener('submit', async function (e) {
     e.preventDefault();
     var fd = new FormData(e.target);
+    var code = COUNTRIES[Number(document.getElementById('regCountry').value)].code;
+    var full = normalizePhone(code, document.getElementById('regPhone').value);
+    if (full.length - code.length < 7 || full.length > 15) {
+      document.getElementById('formErr').innerHTML = '<div class="err">Escribe un número de WhatsApp válido (mínimo 7 dígitos después del código de tu país).</div>';
+      return;
+    }
     try {
-      var r = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: fd.get('username'), email: fd.get('email'), whatsapp: fd.get('whatsapp'), password: fd.get('password') }) });
+      var r = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: fd.get('username'), email: fd.get('email'), whatsapp: full, password: fd.get('password') }) });
       me = r.user;
       renderNav();
       toast('¡Cuenta creada! Bienvenido, ' + me.username + '.');
