@@ -89,7 +89,24 @@ main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
 .star-picker span.on{color:var(--gold)}
 .empty{text-align:center;color:var(--muted);padding:40px 10px;font-size:17px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111827;border:1px solid var(--neon);color:#d1fae5;padding:12px 18px;border-radius:12px;z-index:99;box-shadow:0 8px 30px rgba(0,0,0,.6);font-weight:700}
-footer{text-align:center;color:var(--muted);font-size:13px;padding:24px 12px;border-top:1px solid var(--line)}
+.game-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:16px 0}
+.game-card{border-radius:16px;padding:18px 10px;text-align:center;cursor:pointer;border:1px solid var(--line);transition:transform .15s,box-shadow .15s}
+.game-card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.5)}
+.gc-emoji{font-size:38px;display:block;line-height:1}
+.gc-name{font-weight:800;font-size:15px;display:block;margin-top:8px;color:#fff}
+.guide h2{margin-bottom:8px}
+.guide p{margin:10px 0}
+.guide ol,.guide ul{margin:12px 0 12px 24px;line-height:1.7;color:#c7d0f2}
+.guide li{margin-bottom:6px}
+.footer-pro{max-width:1100px;margin:0 auto;padding:28px 16px 8px;text-align:left}
+.footer-pro .cols{display:grid;grid-template-columns:1fr;gap:22px}
+@media(min-width:700px){.footer-pro .cols{grid-template-columns:1.3fr 1fr 1fr}}
+.footer-pro h4{margin-bottom:10px;font-size:15px;color:var(--text)}
+.footer-pro p,.footer-pro a{font-size:14px;line-height:1.7}
+.footer-pro ul{list-style:none}
+.footer-pro li{margin-bottom:4px}
+.footer-bottom{border-top:1px solid var(--line);margin-top:22px;padding:14px 0 20px;font-size:13px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
 footer a{color:var(--muted)}
 </style>
 </head>
@@ -100,18 +117,63 @@ footer a{color:var(--muted)}
     <nav class="nav-links">
       <a href="#/">🏠 Inicio</a>
       <a href="#/publicar">➕ Publicar</a>
+      <a href="#/guias">📖 Guías</a>
     </nav>
     <div class="nav-user" id="navUser"></div>
   </div>
 </header>
 <main id="app"></main>
 <footer>
-  Mercado Gamer — Compra y vende cuentas de juegos con contacto por WhatsApp.<br>
-  Grupo de Facebook: <b>Cambio Y Ventas De Cuenta Clash of Clans Y Clash Royale Y Cualquier Juego</b> · Los tratos son bajo tu responsabilidad.
+  <div class="footer-pro">
+    <div class="cols">
+      <div>
+        <h4>🎮 Mercado Gamer</h4>
+        <p>Compra y vende cuentas de juegos con contacto por WhatsApp.</p>
+      </div>
+      <div>
+        <h4>Explorar</h4>
+        <ul>
+          <li><a href="#/">Inicio</a></li>
+          <li><a href="#/publicar">Publicar</a></li>
+          <li><a href="#/guias">Guías</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="#/privacidad">Política de privacidad</a></li>
+          <li><a href="#/nosotros">Nosotros</a></li>
+          <li><a href="#/contacto">Contacto</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Mercado Gamer. Todos los derechos reservados.</span>
+      <span>Grupo de Facebook: <a href="https://www.facebook.com/groups/129259724324568" target="_blank" rel="noopener">Cambio Y Ventas De Cuenta Clash of Clans Y Clash Royale Y Cualquier Juego</a></span>
+    </div>
+  </div>
 </footer>
 <script>
 'use strict';
 var GAMES = ['Free Fire', 'Clash of Clans', 'Clash Royale', 'Roblox', 'Steam', 'Epic Games', 'PlayStation', 'Xbox', 'Nintendo', 'Otro'];
+// Tarjetas visuales por juego: solo emoji + degradado CSS, sin logos oficiales
+// ni imágenes externas con marca registrada.
+var GAME_META = {
+  'Free Fire': { emoji: '🔥', bg: 'linear-gradient(135deg,#f97316,#dc2626)' },
+  'Clash of Clans': { emoji: '⚔️', bg: 'linear-gradient(135deg,#f59e0b,#b45309)' },
+  'Clash Royale': { emoji: '👑', bg: 'linear-gradient(135deg,#3b82f6,#1d4ed8)' },
+  'Roblox': { emoji: '🧱', bg: 'linear-gradient(135deg,#ef4444,#991b1b)' },
+  'Steam': { emoji: '🎮', bg: 'linear-gradient(135deg,#334155,#0f172a)' },
+  'Epic Games': { emoji: '🚀', bg: 'linear-gradient(135deg,#6b7280,#111827)' },
+  'PlayStation': { emoji: '🎮', bg: 'linear-gradient(135deg,#2563eb,#1e3a8a)' },
+  'Xbox': { emoji: '🟢', bg: 'linear-gradient(135deg,#22c55e,#15803d)' },
+  'Nintendo': { emoji: '🔴', bg: 'linear-gradient(135deg,#ef4444,#7f1d1d)' },
+  'Otro': { emoji: '➕', bg: 'linear-gradient(135deg,#a855f7,#6d28d9)' }
+};
+function gameCardHtml(g) {
+  var m = GAME_META[g] || { emoji: '🎮', bg: 'linear-gradient(135deg,#1e293b,#312e81)' };
+  return '<div class="game-card" data-game="' + esc(g) + '" style="background:' + m.bg + '"><span class="gc-emoji">' + m.emoji + '</span><span class="gc-name">' + esc(g) + '</span></div>';
+}
 var COUNTRIES = [
   { code: '1', name: 'República Dominicana', flag: '🇩🇴' },
   { code: '1', name: 'Estados Unidos', flag: '🇺🇸' },
@@ -310,12 +372,17 @@ async function viewHome() {
     '<a class="btn ghost" href="#/registro">Crear mi cuenta gratis</a></div></section>' +
     noticeHtml() +
     (me && me.must_change_password ? '<div class="notice">⚠️ <b>Estás usando una clave temporal.</b> Cámbiala ahora en <a href="#/perfil/' + esc(me.username) + '">tu perfil</a> para seguir usando tu cuenta tranquilo.</div>' : '') +
+    '<h2 style="text-align:center;margin-top:26px">🎮 Explora por juego</h2>' +
+    '<div class="game-cards">' + GAMES.map(gameCardHtml).join('') + '</div>' +
     '<div class="filters">' +
     '<input id="fQ" type="search" placeholder="🔍 Buscar: ej. cuenta veterana, nivel 70...">' +
     '<select id="fGame"><option value="">Todos los juegos</option>' + GAMES.map(function (g) { return '<option>' + g + '</option>'; }).join('') + '</select>' +
     '<select id="fSort"><option value="recent">Más recientes</option><option value="views">Más vistas</option></select>' +
     '</div>' +
-    '<div id="list"><p class="empty">Cargando publicaciones…</p></div>';
+    '<div id="list"><p class="empty">Cargando publicaciones…</p></div>' +
+    '<div class="panel" style="margin-top:26px"><h3>📖 Guía para comprar tranquilo</h3>' +
+    '<p style="color:var(--muted)">Antes de tu primer trato, lee esta guía corta:</p>' +
+    '<p style="margin-top:10px"><a href="#/guia/comprar">🛡️ Cómo comprar seguro →</a></p></div>';
   var q = document.getElementById('fQ'), g = document.getElementById('fGame'), s = document.getElementById('fSort');
   var timer = null;
   function reload() {
@@ -338,6 +405,13 @@ async function viewHome() {
   q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(reload, 400); });
   g.addEventListener('change', reload);
   s.addEventListener('change', reload);
+  app.querySelectorAll('.game-card').forEach(function (el) {
+    el.addEventListener('click', function () {
+      g.value = el.getAttribute('data-game');
+      reload();
+      document.getElementById('list').scrollIntoView({ behavior: 'smooth' });
+    });
+  });
   reload();
 }
 
@@ -634,6 +708,65 @@ async function loadAdminResets() {
   });
 }
 
+// ---------- Guías y páginas informativas ----------
+
+var GUIDES = {
+  comprar: {
+    title: '🛡️ Cómo comprar seguro',
+    intro: 'Sigue estos pasos antes de pagar por una cuenta y evita que te estafen.',
+    items: [
+      'Revisa las estrellas y el porcentaje de confianza del vendedor antes de escribirle.',
+      'Pide pruebas: fotos o video de la cuenta, con el nombre o el nivel visible.',
+      'Acuerda el precio y la forma de pago por WhatsApp, y deja todo claro por escrito.',
+      'Si puedes, usa un intermediario de confianza para el trato.',
+      'Nunca pagues por adelantado a alguien sin confianza ni reseñas.',
+      'Recuerda: comprar cuentas va contra las reglas de los juegos (Garena, Supercell, Roblox, Steam, Epic Games) y puede llevar al baneo de la cuenta. El trato es bajo tu responsabilidad.'
+    ]
+  }
+};
+
+function viewGuidesIndex() {
+  app.innerHTML =
+    '<p><a href="#/">← Volver</a></p>' +
+    '<div class="panel guide" style="margin-top:12px"><h2>📖 Guías de Mercado Gamer</h2>' +
+    '<p>Guías cortas para comprar tranquilo.</p>' +
+    '<p style="margin-top:12px"><a href="#/guia/comprar">🛡️ Cómo comprar seguro</a></p></div>';
+}
+
+function viewGuide(slug) {
+  var gd = GUIDES[slug];
+  if (!gd) { app.innerHTML = '<p class="empty">Esa guía no existe.</p><p style="text-align:center"><a href="#/guias">← Ver todas las guías</a></p>'; return; }
+  app.innerHTML =
+    '<p><a href="#/guias">← Todas las guías</a></p>' +
+    '<div class="panel guide" style="margin-top:12px"><h2>' + esc(gd.title) + '</h2>' +
+    '<p>' + esc(gd.intro) + '</p><ol>' +
+    gd.items.map(function (it) { return '<li>' + esc(it) + '</li>'; }).join('') +
+    '</ol>' + noticeHtml() + '</div>';
+}
+
+var LEGAL = {
+  privacidad: {
+    title: '🔒 Política de privacidad',
+    body: '<p>En Mercado Gamer guardamos solo lo necesario para que la página funcione:</p><ul><li>Tu nombre de usuario, tu correo electrónico y tu número de WhatsApp.</li><li>Tus publicaciones y tus reseñas.</li></ul><p>Tu contraseña se guarda como un código (hash) y nunca en texto plano: ni el administrador puede verla.</p><p>Tus datos no se venden ni se comparten con nadie.</p><p>Tu correo no se muestra en público. Tu WhatsApp se muestra solo en tus publicaciones, como botón de contacto, porque es la forma de que te escriban los compradores.</p><p>Las publicaciones muestran tu usuario, tus estrellas y tu porcentaje de confianza.</p><p>Si quieres que se borre tu cuenta y tus datos, escríbele al administrador desde el grupo de Facebook y lo hará.</p>'
+  },
+  nosotros: {
+    title: '👋 Nosotros',
+    body: '<p>Mercado Gamer nació del grupo de Facebook "Cambio Y Ventas De Cuenta Clash of Clans Y Clash Royale Y Cualquier Juego", administrado por Erick, para que comprar y vender cuentas de juegos sea más ordenado y con confianza.</p><p>Aquí publicas tu cuenta con foto y precio, la gente te contacta directo por WhatsApp, y después de cada trato se dejan reseñas con estrellas para que todos sepan en quién confiar.</p><p>No somos una tienda: no guardamos dinero ni participamos en los pagos. Los tratos son entre el vendedor y el comprador, bajo su responsabilidad.</p><p>La idea es simple: una comunidad de gamers que se ayuda y se cuida entre sí.</p>'
+  },
+  contacto: {
+    title: '💬 Contacto',
+    body: '<p>El contacto con Mercado Gamer es a través del grupo de Facebook:</p><p><a href="https://www.facebook.com/groups/129259724324568" target="_blank" rel="noopener">Cambio Y Ventas De Cuenta Clash of Clans Y Clash Royale Y Cualquier Juego</a></p><p>Si olvidaste tu clave, usa "¿Olvidaste tu clave?" en la página de entrar: el administrador revisará que la cuenta es tuya y te pasará una clave temporal por WhatsApp.</p><p>Si quieres reportar una publicación o un usuario, escríbele al administrador en el grupo.</p>'
+  }
+};
+
+function viewLegal(page) {
+  var lg = LEGAL[page];
+  if (!lg) { app.innerHTML = '<p class="empty">Página no encontrada.</p><p style="text-align:center"><a href="#/">← Volver al inicio</a></p>'; return; }
+  app.innerHTML =
+    '<p><a href="#/">← Volver</a></p>' +
+    '<div class="panel guide" style="margin-top:12px"><h2>' + esc(lg.title) + '</h2>' + lg.body + '</div>';
+}
+
 // ---------- Router ----------
 
 function route() {
@@ -647,6 +780,11 @@ function route() {
   if (page === 'olvide-clave') return viewForgot();
   if (page === 'registro') return viewRegister();
   if (page === 'perfil' && parts[1]) return viewProfile(decodeURIComponent(parts[1]));
+  if (page === 'guias') return viewGuidesIndex();
+  if (page === 'guia' && parts[1]) return viewGuide(parts[1]);
+  if (page === 'privacidad') return viewLegal('privacidad');
+  if (page === 'nosotros') return viewLegal('nosotros');
+  if (page === 'contacto') return viewLegal('contacto');
   app.innerHTML = '<p class="empty">Página no encontrada.</p><p style="text-align:center"><a href="#/">← Volver al inicio</a></p>';
 }
 
