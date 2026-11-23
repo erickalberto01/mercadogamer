@@ -11,3 +11,10 @@ binding = "DB"
 database_name = "mercadogamer"
 # Base D1 "mercadogamer" creada en el panel 23/11/2026.
 database_id = "d4073b0b-ed63-4a35-a9cd-a451c151561c"
+
+# Depósito de imágenes subidas desde el celular (creado en el panel 23/11/2026).
+# Si el bucket no existe todavía, el despliegue falla: crearlo primero en
+# Workers & Pages → R2 → Create bucket, con el nombre "mercadogamer-images".
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "mercadogamer-images"

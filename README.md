@@ -48,6 +48,34 @@ Y Clash Royale Y Cualquier Juego"** (7,000 miembros, administrado por Erick).
   intermediario de confianza.
 - Diseño gaming oscuro con neón, mobile-first, todo en español.
 
+## Qué hace (v5 — nuevo)
+
+- **Editar y borrar publicaciones:** el dueño puede editar título, juego,
+  precio, moneda, descripción y foto de sus publicaciones activas, y
+  borrarlas (con confirmación). El admin también puede borrar cualquier
+  publicación desde un reporte.
+- **Reportar estafadores:** botón "Reportar" en cada publicación y en cada
+  perfil. Motivos: Estafa, Cuenta falsa, Precio engañoso, Otro + comentario.
+  El admin ve los reportes en su perfil y puede: borrar la publicación,
+  **bloquear al usuario** (no puede entrar ni publicar) o descartar el
+  reporte.
+- **Tratos verificados:** al marcar una publicación como vendida, el
+  vendedor puede escribir el usuario del comprador y el trato queda
+  registrado. Las reseñas entre esas dos personas muestran
+  "✓ Trato verificado"; las demás dicen "Sin verificar". El perfil muestra
+  cuántas reseñas son verificadas.
+- **Actividad del admin:** en su perfil, panel con contador de pendientes
+  (reseteos + reportes sin resolver), las últimas publicaciones y las
+  últimas reseñas.
+- **Subir foto desde el celular:** en publicar y editar, campo de archivo
+  (`accept="image/*"`, cámara o galería en el teléfono) con vista previa,
+  máximo 2 MB (JPG, PNG, WebP, GIF, AVIF). Las fotos se guardan en el
+  bucket R2 `mercadogamer-images` y se sirven desde `/img/...`. La URL
+  sigue disponible como alternativa.
+- **Móvil primero:** botones y campos grandes y cómodos al tacto
+  (mínimo 48 px, texto de 16 px en los campos para que el celular no haga
+  zoom al escribir).
+
 ## Arquitectura
 
 Igual que la página de códigos Roblox de Erick:
@@ -57,6 +85,9 @@ Igual que la página de códigos Roblox de Erick:
 - **Cloudflare D1** (`mercadogamer`): base de datos (tablas en
   `schema.sql`; el Worker también las crea solas en la primera llamada a
   la API, así que no hay que ejecutar el SQL a mano).
+- **Cloudflare R2** (`mercadogamer-images`): depósito de las fotos subidas
+  desde el celular (binding `IMAGES` en `wrangler.toml`). El Worker las
+  sirve en `/img/...`.
 - **Frontend** (`index.html`): una sola página (SPA) con todo el CSS y JS
   dentro. Sin build: se sube tal cual.
 - **Despliegue:** push a GitHub → Cloudflare conectado al repo despliega
@@ -69,7 +100,7 @@ Igual que la página de códigos Roblox de Erick:
 |---|---|
 | `index.html` | Toda la página (diseño + lógica del navegador). |
 | `src/index.js` | El Worker: API de auth, publicaciones, reseñas y vistas. |
-| `wrangler.toml` | Configuración del Worker (nombre, assets, binding D1). |
+| `wrangler.toml` | Configuración del Worker (nombre, assets, binding D1 y binding R2 `IMAGES`). |
 | `schema.sql` | Tablas D1 (referencia; el Worker las crea solas). |
 | `README.md` | Este archivo. |
 
@@ -89,7 +120,16 @@ Igual que la página de códigos Roblox de Erick:
 | `/api/listings` | GET | Lista publicaciones activas (`?game=&q=&sort=recent\|views`). |
 | `/api/listings` | POST | Crea publicación (sesión). |
 | `/api/listings/:id` | GET | Detalle (+1 vista si no hay cookie). |
-| `/api/listings/:id` | PATCH | Cambia estado activa/vendida (solo el dueño). |
+| `/api/listings/:id` | PATCH | Edita los campos (solo el dueño, solo si está activa) o cambia estado activa/vendida; con `buyer` registra el trato. |
+| `/api/listings/:id` | DELETE | Borra la publicación (solo el dueño o el admin). |
+| `/api/upload` | POST | Sube una foto (form-data `image`, máx. 2 MB; sesión). Devuelve `{url: "/img/..."}`. |
+| `/img/:key` | GET | Sirve una foto subida desde R2. |
+| `/api/reports` | POST | Crea un reporte (sesión; `listing_id` o `username`, `reason`, `comment`). |
+| `/api/admin/reports` | GET | Lista reportes (solo admin). |
+| `/api/admin/reports/:id/dismiss` | POST | Descarta el reporte (solo admin). |
+| `/api/admin/reports/:id/delete_listing` | POST | Borra la publicación reportada (solo admin). |
+| `/api/admin/reports/:id/ban_user` | POST | Bloquea al usuario reportado (solo admin). |
+| `/api/admin/activity` | GET | Actividad reciente + contador de pendientes (solo admin). |
 | `/api/reviews` | POST | Crea o actualiza reseña (sesión). |
 | `/api/users/:username` | GET | Perfil: datos, confianza, publicaciones, reseñas. |
 | `/api/users/:username/my-review` | GET | Mi reseña a ese usuario (sesión). |
@@ -144,9 +184,12 @@ de usuarios se escapan en el frontend (sin HTML inyectado).
   página (por ejemplo `erickromanp`) para quedar como **admin**
   automáticamente y poder aprobar los reseteos de clave. Si ya hay usuarios
   registrados y ninguno es admin, el más antiguo queda como admin solo.
-- **No hay panel de moderación en v1:** si una publicación es falsa o
-  engañosa, se borra directo en la base D1 desde el panel de Cloudflare
-  (D1 → `mercadogamer` → Console → `DELETE FROM listings WHERE id = X;`).
+- **Moderación en la página:** el admin revisa los reportes en su perfil
+  (borrar publicación, bloquear usuario o descartar). Ya no hace falta
+  borrar por consola D1, salvo casos raros.
+- El bucket R2 `mercadogamer-images` debe existir antes de desplegar una
+  versión que use el binding `IMAGES` (Workers & Pages → R2 → Create
+  bucket). Si el despliegue falla por el binding, es por eso.
 
 ## Seguridad
 

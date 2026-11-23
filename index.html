@@ -30,6 +30,18 @@ header{position:sticky;top:0;z-index:50;background:rgba(7,11,22,.92);backdrop-fi
 .btn.wa{background:linear-gradient(135deg,#2ee06f,#128c4b);color:#fff;box-shadow:0 0 16px rgba(37,211,102,.35);width:100%;text-align:center}
 .btn.danger{background:linear-gradient(135deg,#f87171,#dc2626);color:#fff;box-shadow:none}
 .btn.small{padding:7px 12px;font-size:13px}
+.verified{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:rgba(34,255,136,.15);color:var(--neon)}
+.unverified{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.15);color:var(--muted)}
+.file-preview{margin-top:8px}
+.file-preview img{max-width:100%;max-height:220px;border-radius:12px;display:block}
+input[type="file"]{width:100%;background:var(--bg2);border:1px dashed var(--line);color:var(--text);padding:12px;border-radius:12px;font-size:15px}
+/* Móvil primero: botones y campos grandes y cómodos al tacto */
+@media (max-width:700px){
+  .btn{padding:13px 18px;min-height:48px}
+  .btn.small{min-height:40px}
+  .field input,.field select,.field textarea{padding:14px;font-size:16px}
+  .nav-links a{padding:10px 12px}
+}
 main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
 .hero{text-align:center;padding:28px 12px 10px}
 .hero h1{font-size:clamp(30px,6vw,52px);font-weight:900;line-height:1.05;background:linear-gradient(90deg,var(--neon),var(--neon2),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 40px rgba(34,211,238,.25)}
@@ -302,6 +314,52 @@ async function api(path, opts) {
   return data;
 }
 
+// Sube una foto al depósito de imágenes (R2) y devuelve su URL (/img/...).
+async function uploadImage(file) {
+  var fd = new FormData();
+  fd.append('image', file);
+  var res = await fetch('/api/upload', { method: 'POST', body: fd });
+  var data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  if (!res.ok) throw new Error((data && data.error) || ('Error ' + res.status));
+  return data.url;
+}
+
+// Campo de foto: subir desde el celular (cámara o galería) + URL alternativa.
+function photoFieldHtml(currentUrl) {
+  return '<div class="field"><label>Foto desde tu celular</label>' +
+    '<input type="file" id="photoFile" accept="image/*">' +
+    '<small>Elige cámara o galería. Máximo 2 MB (JPG, PNG, WebP, GIF o AVIF). Si no subes foto, se usa la URL de abajo o un ícono.</small>' +
+    '<div class="file-preview" id="photoPreview">' + (currentUrl ? '<img src="' + esc(currentUrl) + '" alt="Foto actual">' : '') + '</div></div>' +
+    '<div class="field"><label>O URL de la foto (opcional)</label><input name="image_url" type="url" placeholder="https://... (foto de la cuenta)" value="' + esc(currentUrl || '') + '"><small>Si subes una foto desde el celular, esa tiene prioridad.</small></div>';
+}
+
+function bindPhotoPreview() {
+  var input = document.getElementById('photoFile');
+  if (!input) return;
+  input.addEventListener('change', function () {
+    var f = input.files && input.files[0];
+    var prev = document.getElementById('photoPreview');
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024) { toast('La foto debe pesar 2 MB o menos.'); input.value = ''; return; }
+    if (!/^image\//.test(f.type)) { toast('Ese archivo no es una imagen.'); input.value = ''; return; }
+    var reader = new FileReader();
+    reader.onload = function (e) { prev.innerHTML = '<img src="' + e.target.result + '" alt="Vista previa">'; };
+    reader.readAsDataURL(f);
+  });
+}
+
+// Devuelve la URL de la foto a guardar: sube el archivo si hay uno,
+// si no usa la URL escrita en el campo.
+async function resolvePhotoUrl(form) {
+  var input = document.getElementById('photoFile');
+  if (input && input.files && input.files[0]) {
+    return await uploadImage(input.files[0]);
+  }
+  var url = form.querySelector('input[name="image_url"]');
+  return url ? url.value.trim() : '';
+}
+
 async function refreshMe() {
   try {
     var d = await api('/api/auth/me');
@@ -441,17 +499,72 @@ async function viewDetail(id) {
     '<div style="margin:6px 0">' + starsHtml(l.seller.avg_stars, l.seller.review_count) + ' ' + trustHtml(l.seller.trust_pct) + '</div>' +
     '<a class="btn wa" style="margin-top:10px" href="' + waLink(l.seller.whatsapp, 'Hola, vi tu publicación en Mercado Gamer: ' + l.title + ' (' + money(l.price, l.currency) + '). ¿Sigue disponible?') + '" target="_blank" rel="noopener">💬 Hablar por WhatsApp</a>' +
     (isOwner ? '<button class="btn ' + (l.status === 'vendida' ? '' : 'danger') + '" id="btnStatus" style="width:100%;margin-top:10px">' + (l.status === 'vendida' ? '↩️ Volver a activar' : '✅ Marcar como vendida') + '</button>' : '') +
+    (isOwner && l.status !== 'vendida' ? '<div id="soldBox" style="display:none;margin-top:10px"><div class="field"><label>¿A quién se la vendiste? (usuario del comprador)</label><input id="soldBuyer" placeholder="ej. juan_gamer" autocomplete="off"><small>Si lo escribes, el trato queda registrado y las reseñas entre ustedes salen como "✓ Trato verificado". Si lo dejas vacío, solo se marca vendida.</small></div><button class="btn" id="btnConfirmSold" style="width:100%">✅ Confirmar venta</button><button class="btn ghost" id="btnCancelSold" style="width:100%;margin-top:8px">Cancelar</button></div>' : '') +
+    (isOwner ? '<a class="btn ghost" href="#/editar/' + l.id + '" style="width:100%;margin-top:10px;text-align:center">✏️ Editar publicación</a>' +
+    '<button class="btn danger" id="btnDelete" style="width:100%;margin-top:10px">🗑️ Eliminar publicación</button>' : '') +
+    (!isOwner && me ? '<button class="btn ghost" id="btnReport" style="width:100%;margin-top:10px">🚩 Reportar esta publicación</button><div id="reportBox"></div>' : '') +
     '</div>' +
     noticeHtml() +
     '</div></div>';
   var btn = document.getElementById('btnStatus');
   if (btn) {
     btn.onclick = async function () {
+      if (l.status === 'vendida') {
+        try {
+          await api('/api/listings/' + l.id, { method: 'PATCH', body: JSON.stringify({ status: 'activa' }) });
+          toast('Publicación activada de nuevo.');
+          viewDetail(l.id);
+        } catch (e) { toast(e.message); }
+        return;
+      }
+      // Marcar vendida: preguntar el comprador para registrar el trato.
+      var box = document.getElementById('soldBox');
+      if (box) { box.style.display = ''; btn.style.display = 'none'; }
+    };
+  }
+  var btnConfirm = document.getElementById('btnConfirmSold');
+  if (btnConfirm) {
+    btnConfirm.onclick = async function () {
+      var buyer = document.getElementById('soldBuyer').value.trim();
+      var body = { status: 'vendida' };
+      if (buyer) body.buyer = buyer;
       try {
-        await api('/api/listings/' + l.id, { method: 'PATCH', body: JSON.stringify({ status: l.status === 'vendida' ? 'activa' : 'vendida' }) });
-        toast('Publicación actualizada.');
+        await api('/api/listings/' + l.id, { method: 'PATCH', body: JSON.stringify(body) });
+        toast(buyer ? 'Venta registrada con @' + buyer + '.' : 'Publicación marcada como vendida.');
         viewDetail(l.id);
       } catch (e) { toast(e.message); }
+    };
+    document.getElementById('btnCancelSold').onclick = function () {
+      document.getElementById('soldBox').style.display = 'none';
+      btn.style.display = '';
+    };
+  }
+  var del = document.getElementById('btnDelete');
+  if (del) {
+    del.onclick = async function () {
+      if (!confirm('¿Seguro que quieres eliminar esta publicación? No se puede deshacer.')) return;
+      try {
+        await api('/api/listings/' + l.id, { method: 'DELETE' });
+        toast('Publicación eliminada.');
+        location.hash = '#/';
+      } catch (e) { toast(e.message); }
+    };
+  }
+  var rep = document.getElementById('btnReport');
+  if (rep) {
+    rep.onclick = function () {
+      var box = document.getElementById('reportBox');
+      box.innerHTML = '<div class="panel" style="margin-top:10px"><h3>🚩 Reportar esta publicación</h3>' +
+        '<div class="field"><label>Motivo *</label><select id="repReason"><option>Estafa</option><option>Cuenta falsa</option><option>Precio engañoso</option><option>Otro</option></select></div>' +
+        '<div class="field"><label>¿Qué pasó?</label><textarea id="repComment" maxlength="500" placeholder="Cuéntanos brevemente..."></textarea></div>' +
+        '<div id="repErr"></div><button class="btn danger" id="repSend" style="width:100%">Enviar reporte</button></div>';
+      document.getElementById('repSend').onclick = async function () {
+        try {
+          await api('/api/reports', { method: 'POST', body: JSON.stringify({ listing_id: l.id, reason: document.getElementById('repReason').value, comment: document.getElementById('repComment').value }) });
+          box.innerHTML = '<div class="ok">Reporte enviado. El administrador lo revisará.</div>';
+          rep.style.display = 'none';
+        } catch (e) { document.getElementById('repErr').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }
+      };
     };
   }
 }
@@ -467,24 +580,71 @@ function viewPublish() {
     '<div class="field" id="gameCustomField" style="display:none"><label>¿Qué juego es? *</label><input name="game_custom" id="gameCustom" maxlength="40" placeholder="Ej. Minecraft, Fortnite, GTA V..."></div>' +
     '<div class="field"><label>Precio *</label><input name="price" type="number" min="1" step="0.01" required placeholder="Ej. 2500"></div>' +
     '<div class="field"><label>Moneda *</label><select name="currency"><option>DOP</option><option>USD</option></select></div>' +
-    '<div class="field"><label>URL de la foto (opcional)</label><input name="image_url" type="url" placeholder="https://... (foto de la cuenta)"><small>Si no tienes foto, se muestra un ícono del juego.</small></div>' +
+    photoFieldHtml('') +
     '<div class="field"><label>Descripción</label><textarea name="description" maxlength="1000" placeholder="Nivel, personajes, skins, armas, por qué la vendes..."></textarea></div>' +
     '<button class="btn" type="submit" style="width:100%">🚀 Publicar ahora</button></form>';
   document.getElementById('pubGame').addEventListener('change', function (e) {
     document.getElementById('gameCustomField').style.display = e.target.value === 'Otro' ? '' : 'none';
   });
+  bindPhotoPreview();
   document.getElementById('pubForm').addEventListener('submit', async function (e) {
     e.preventDefault();
+    var imgUrl = '';
+    try { imgUrl = await resolvePhotoUrl(e.target); }
+    catch (err2) { document.getElementById('formErr').innerHTML = '<div class="err">' + esc(err2.message) + '</div>'; return; }
     var fd = new FormData(e.target);
     var body = {
       title: fd.get('title'), game: fd.get('game'), game_custom: fd.get('game_custom'),
       price: Number(fd.get('price')), currency: fd.get('currency'),
-      description: fd.get('description'), image_url: fd.get('image_url')
+      description: fd.get('description'), image_url: imgUrl
     };
     try {
       var r = await api('/api/listings', { method: 'POST', body: JSON.stringify(body) });
       toast('¡Publicación creada!');
       location.hash = '#/publicacion/' + r.id;
+    } catch (err) {
+      document.getElementById('formErr').innerHTML = '<div class="err">' + esc(err.message) + '</div>';
+    }
+  });
+}
+
+// ---------- Editar ----------
+
+async function viewEdit(id) {
+  if (!me) { location.hash = '#/login'; toast('Primero crea tu cuenta o entra.'); return; }
+  app.innerHTML = '<p class="empty">Cargando publicación…</p>';
+  var l;
+  try { l = await api('/api/listings/' + id); }
+  catch (e) { app.innerHTML = '<p class="empty">No se encontró esta publicación.</p>'; return; }
+  if (l.user_id !== me.id) { app.innerHTML = '<p class="empty">Solo el vendedor puede editar esta publicación.</p>'; return; }
+  if (l.status !== 'activa') { app.innerHTML = '<p class="empty">Solo puedes editar una publicación activa.</p><p style="text-align:center"><a href="#/publicacion/' + l.id + '">← Volver</a></p>'; return; }
+  var isCustom = GAMES.indexOf(l.game) < 0;
+  app.innerHTML =
+    '<form class="form" id="editForm"><h2>✏️ Editar publicación</h2><div id="formErr"></div>' +
+    '<div class="field"><label>Título *</label><input name="title" required minlength="3" maxlength="100" value="' + esc(l.title) + '"></div>' +
+    '<div class="field"><label>Juego *</label><select name="game" id="editGame">' + GAMES.map(function (g) { return '<option' + ((isCustom ? 'Otro' : l.game) === g ? ' selected' : '') + '>' + g + '</option>'; }).join('') + '</select></div>' +
+    '<div class="field" id="gameCustomField" style="display:' + (isCustom ? '' : 'none') + '"><label>¿Qué juego es? *</label><input name="game_custom" id="gameCustom" maxlength="40" value="' + esc(isCustom ? l.game : '') + '"></div>' +
+    '<div class="field"><label>Precio *</label><input name="price" type="number" min="1" step="0.01" required value="' + l.price + '"></div>' +
+    '<div class="field"><label>Moneda *</label><select name="currency"><option' + (l.currency === 'DOP' ? ' selected' : '') + '>DOP</option><option' + (l.currency === 'USD' ? ' selected' : '') + '>USD</option></select></div>' +
+    photoFieldHtml(l.image_url || '') +
+    '<div class="field"><label>Descripción</label><textarea name="description" maxlength="1000">' + esc(l.description || '') + '</textarea></div>' +
+    '<button class="btn" type="submit" style="width:100%">💾 Guardar cambios</button>' +
+    '<p style="text-align:center;margin-top:12px"><a href="#/publicacion/' + l.id + '">Cancelar</a></p></form>';
+  document.getElementById('editGame').addEventListener('change', function (e) {
+    document.getElementById('gameCustomField').style.display = e.target.value === 'Otro' ? '' : 'none';
+  });
+  bindPhotoPreview();
+  document.getElementById('editForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var imgUrl = '';
+    try { imgUrl = await resolvePhotoUrl(e.target); }
+    catch (err2) { document.getElementById('formErr').innerHTML = '<div class="err">' + esc(err2.message) + '</div>'; return; }
+    var fd = new FormData(e.target);
+    var body = { title: fd.get('title'), game: fd.get('game'), game_custom: fd.get('game_custom'), price: Number(fd.get('price')), currency: fd.get('currency'), description: fd.get('description'), image_url: imgUrl };
+    try {
+      await api('/api/listings/' + l.id, { method: 'PATCH', body: JSON.stringify(body) });
+      toast('¡Publicación actualizada!');
+      location.hash = '#/publicacion/' + l.id;
     } catch (err) {
       document.getElementById('formErr').innerHTML = '<div class="err">' + esc(err.message) + '</div>';
     }
@@ -593,18 +753,37 @@ async function viewProfile(username) {
   var html =
     '<div class="panel"><h2>👤 ' + esc(u.username) + '</h2>' +
     '<div style="margin:8px 0">' + starsHtml(u.avg_stars, u.review_count) + ' ' + trustHtml(u.trust_pct) + '</div>' +
-    '<p style="color:var(--muted)">' + u.review_count + ' reseña(s) · Miembro desde ' + new Date(u.created_at).toLocaleDateString('es-DO') + '</p>' +
-    '<a class="btn wa" style="margin-top:12px;width:auto" href="' + waLink(u.whatsapp, 'Hola ' + u.username + ', te escribo desde Mercado Gamer.') + '" target="_blank" rel="noopener">💬 WhatsApp: +' + esc(u.whatsapp) + '</a></div>' +
+    '<p style="color:var(--muted)">' + u.review_count + ' reseña(s) · ' + (u.verified_count || 0) + ' verificada(s) · Miembro desde ' + new Date(u.created_at).toLocaleDateString('es-DO') + '</p>' +
+    '<a class="btn wa" style="margin-top:12px;width:auto" href="' + waLink(u.whatsapp, 'Hola ' + u.username + ', te escribo desde Mercado Gamer.') + '" target="_blank" rel="noopener">💬 WhatsApp: +' + esc(u.whatsapp) + '</a>' +
+    (!isSelf && me ? '<button class="btn ghost small" id="btnReportUser" style="margin-top:10px">🚩 Reportar a este usuario</button><div id="reportBox"></div>' : '') + '</div>' +
     '<div class="panel" style="margin-top:16px"><h3>📦 Publicaciones de ' + esc(u.username) + ' (' + data.listings.length + ')</h3>' +
     (data.listings.length ? '<div class="grid">' + data.listings.map(cardHtml).join('') + '</div>' : '<p style="color:var(--muted)">Todavía no ha publicado nada.</p>') + '</div>' +
     '<div class="panel" style="margin-top:16px"><h3>⭐ Reseñas recibidas (' + data.reviews.length + ')</h3><div id="reviewList">' +
     (data.reviews.length ? data.reviews.map(function (r) {
       return '<div class="review"><span class="who">' + esc(r.reviewer) + '</span> ' + starsHtml(r.stars, 1).replace(/<small>.*<\/small>/, '') +
+        ' ' + (r.verified ? '<span class="verified">✓ Trato verificado</span>' : '<span class="unverified">Sin verificar</span>') +
         ' <span class="when">' + timeAgo(r.created_at) + '</span><p>' + esc(r.comment || '') + '</p></div>';
     }).join('') : '<p style="color:var(--muted)">Aún no tiene reseñas. ¡Sé el primero en dejarle una después de un trato!</p>') +
     '</div><div id="reviewForm"></div></div>';
   app.innerHTML = html;
   bindCards();
+  var repUser = document.getElementById('btnReportUser');
+  if (repUser) {
+    repUser.onclick = function () {
+      var box = document.getElementById('reportBox');
+      box.innerHTML = '<div class="panel" style="margin-top:10px"><h3>🚩 Reportar a ' + esc(u.username) + '</h3>' +
+        '<div class="field"><label>Motivo *</label><select id="repReason"><option>Estafa</option><option>Cuenta falsa</option><option>Precio engañoso</option><option>Otro</option></select></div>' +
+        '<div class="field"><label>¿Qué pasó?</label><textarea id="repComment" maxlength="500" placeholder="Cuéntanos brevemente..."></textarea></div>' +
+        '<div id="repErr"></div><button class="btn danger" id="repSend" style="width:100%">Enviar reporte</button></div>';
+      document.getElementById('repSend').onclick = async function () {
+        try {
+          await api('/api/reports', { method: 'POST', body: JSON.stringify({ username: u.username, reason: document.getElementById('repReason').value, comment: document.getElementById('repComment').value }) });
+          box.innerHTML = '<div class="ok">Reporte enviado. El administrador lo revisará.</div>';
+          repUser.style.display = 'none';
+        } catch (e) { document.getElementById('repErr').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }
+      };
+    };
+  }
   if (isSelf) {
     var selfDiv = document.createElement('div');
     selfDiv.innerHTML =
@@ -614,7 +793,9 @@ async function viewProfile(username) {
       '<div class="field"><label>Clave actual *</label><input id="pwCurrent" type="password" autocomplete="current-password"></div>' +
       '<div class="field"><label>Clave nueva *</label><input id="pwNew" type="password" minlength="6" autocomplete="new-password" placeholder="Mínimo 6 caracteres"></div>' +
       '<button class="btn" id="btnChangePw">Cambiar clave</button></div>' +
-      (me.is_admin ? '<div class="panel" style="margin-top:16px"><h3>🔐 Solicitudes de reseteo de clave</h3><p style="color:var(--muted);font-size:14px">Eres el administrador. Cuando alguien olvida su clave, su solicitud aparece aquí. Verifica que el WhatsApp con el que pide coincida con el registrado en su cuenta, o que confirme su correo, antes de aprobar.</p><div id="tempPwBox"></div><div id="adminResets"><p style="color:var(--muted)">Cargando solicitudes…</p></div></div>' : '');
+      (me.is_admin ? '<div class="panel" style="margin-top:16px"><h3>🔐 Solicitudes de reseteo de clave</h3><p style="color:var(--muted);font-size:14px">Eres el administrador. Cuando alguien olvida su clave, su solicitud aparece aquí. Verifica que el WhatsApp con el que pide coincida con el registrado en su cuenta, o que confirme su correo, antes de aprobar.</p><div id="tempPwBox"></div><div id="adminResets"><p style="color:var(--muted)">Cargando solicitudes…</p></div></div>' : '') +
+      (me.is_admin ? '<div class="panel" style="margin-top:16px"><h3>📊 Actividad reciente <span id="pendingBadge"></span></h3><p style="color:var(--muted);font-size:14px">Reseteos y reportes pendientes, reseñas nuevas y publicaciones nuevas.</p><div id="adminActivity"><p style="color:var(--muted)">Cargando actividad…</p></div></div>' : '') +
+      (me.is_admin ? '<div class="panel" style="margin-top:16px"><h3>🚩 Reportes de estafa</h3><p style="color:var(--muted);font-size:14px">Revisa cada reporte antes de actuar: puedes borrar la publicación, bloquear al usuario o descartar el reporte.</p><div id="adminReports"><p style="color:var(--muted)">Cargando reportes…</p></div></div>' : '');
     app.appendChild(selfDiv);
     document.getElementById('btnChangePw').onclick = async function () {
       var cur = document.getElementById('pwCurrent').value;
@@ -628,7 +809,7 @@ async function viewProfile(username) {
         document.getElementById('pwErr').innerHTML = '<div class="err">' + esc(e.message) + '</div>';
       }
     };
-    if (me.is_admin) loadAdminResets();
+    if (me.is_admin) { loadAdminResets(); loadAdminReports(); loadAdminActivity(); }
   }
   if (!isSelf && me) {
     var mine = null;
@@ -708,6 +889,85 @@ async function loadAdminResets() {
   });
 }
 
+// ---------- Panel del admin: reportes de estafa ----------
+
+async function loadAdminReports() {
+  var el = document.getElementById('adminReports');
+  if (!el) return;
+  var items;
+  try { items = await api('/api/admin/reports'); }
+  catch (e) { el.innerHTML = '<p class="empty">No se pudieron cargar los reportes: ' + esc(e.message) + '</p>'; return; }
+  if (!items.length) { el.innerHTML = '<p style="color:var(--muted)">No hay reportes.</p>'; return; }
+  el.innerHTML = items.map(function (r) {
+    var body = '<div class="review"><span class="who">' + esc(r.reporter) + ' reportó a ' + esc(r.reported) + '</span> ' +
+      '<span class="badge">' + esc(r.reason) + '</span> <span class="when">' + timeAgo(r.created_at) + ' · ' + esc(r.status) + '</span>' +
+      '<p>' + (r.listing_title ? '📌 Publicación: <b>' + esc(r.listing_title) + '</b><br>' : '') + esc(r.comment || 'Sin comentario.') + '</p>';
+    if (r.status === 'pendiente') {
+      body += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">' +
+        (r.listing_id ? '<button class="btn danger small" data-rep-del="' + r.id + '">🗑️ Borrar publicación</button>' : '') +
+        '<button class="btn danger small" data-rep-ban="' + r.id + '">⛔ Bloquear usuario</button>' +
+        '<button class="btn ghost small" data-rep-dismiss="' + r.id + '">Descartar</button></div>';
+    }
+    return body + '</div>';
+  }).join('');
+  el.querySelectorAll('[data-rep-del]').forEach(function (b) {
+    b.onclick = async function () {
+      if (!confirm('¿Borrar la publicación reportada? No se puede deshacer.')) return;
+      try {
+        await api('/api/admin/reports/' + b.getAttribute('data-rep-del') + '/delete_listing', { method: 'POST' });
+        toast('Publicación borrada.');
+        loadAdminReports(); loadAdminActivity();
+      } catch (e) { toast(e.message); }
+    };
+  });
+  el.querySelectorAll('[data-rep-ban]').forEach(function (b) {
+    b.onclick = async function () {
+      if (!confirm('¿Bloquear a este usuario? No podrá entrar ni publicar.')) return;
+      try {
+        await api('/api/admin/reports/' + b.getAttribute('data-rep-ban') + '/ban_user', { method: 'POST' });
+        toast('Usuario bloqueado.');
+        loadAdminReports(); loadAdminActivity();
+      } catch (e) { toast(e.message); }
+    };
+  });
+  el.querySelectorAll('[data-rep-dismiss]').forEach(function (b) {
+    b.onclick = async function () {
+      try {
+        await api('/api/admin/reports/' + b.getAttribute('data-rep-dismiss') + '/dismiss', { method: 'POST' });
+        toast('Reporte descartado.');
+        loadAdminReports(); loadAdminActivity();
+      } catch (e) { toast(e.message); }
+    };
+  });
+}
+
+// ---------- Panel del admin: actividad reciente ----------
+
+async function loadAdminActivity() {
+  var el = document.getElementById('adminActivity');
+  if (!el) return;
+  var data;
+  try { data = await api('/api/admin/activity'); }
+  catch (e) { el.innerHTML = '<p class="empty">No se pudo cargar la actividad: ' + esc(e.message) + '</p>'; return; }
+  var badge = document.getElementById('pendingBadge');
+  if (badge) {
+    badge.innerHTML = data.pending_count > 0
+      ? '<span class="trust low">🔔 ' + data.pending_count + ' pendiente(s)</span>'
+      : '<span class="trust high">✅ Al día</span>';
+  }
+  var h = '';
+  h += '<p style="margin:8px 0">🔑 Reseteos pendientes: <b>' + data.pending_resets + '</b> · 🚩 Reportes pendientes: <b>' + data.pending_reports + '</b></p>';
+  h += '<h3 style="margin-top:12px">🆕 Últimas publicaciones</h3>';
+  h += data.recent_listings.length ? data.recent_listings.map(function (x) {
+    return '<div class="review"><span class="who"><a href="#/publicacion/' + x.id + '">' + esc(x.title) + '</a></span> <span class="badge">' + esc(x.game) + '</span> <span class="when">' + esc(x.seller) + ' · ' + timeAgo(x.created_at) + '</span></div>';
+  }).join('') : '<p style="color:var(--muted)">Sin publicaciones todavía.</p>';
+  h += '<h3 style="margin-top:12px">⭐ Últimas reseñas</h3>';
+  h += data.recent_reviews.length ? data.recent_reviews.map(function (x) {
+    return '<div class="review"><span class="who">' + esc(x.reviewer) + ' → ' + esc(x.reviewed) + '</span> ' + starsHtml(x.stars, 1).replace(/<small>.*<\/small>/, '') + ' <span class="when">' + timeAgo(x.created_at) + '</span><p>' + esc(x.comment || '') + '</p></div>';
+  }).join('') : '<p style="color:var(--muted)">Sin reseñas todavía.</p>';
+  el.innerHTML = h;
+}
+
 // ---------- Guías y páginas informativas ----------
 
 var GUIDES = {
@@ -755,7 +1015,7 @@ var LEGAL = {
   },
   contacto: {
     title: '💬 Contacto',
-    body: '<p>El contacto con Mercado Gamer es a través del grupo de Facebook:</p><p><a href="https://www.facebook.com/groups/129259724324568" target="_blank" rel="noopener">Cambio Y Ventas De Cuenta Clash of Clans Y Clash Royale Y Cualquier Juego</a></p><p>Si olvidaste tu clave, usa "¿Olvidaste tu clave?" en la página de entrar: el administrador revisará que la cuenta es tuya y te pasará una clave temporal por WhatsApp.</p><p>Si quieres reportar una publicación o un usuario, escríbele al administrador en el grupo.</p>'
+    body: '<p>El contacto con Mercado Gamer es a través del grupo de Facebook:</p><p><a href="https://www.facebook.com/groups/129259724324568" target="_blank" rel="noopener">Cambio Y Ventas De Cuenta Clash of Clans Y Clash Royale Y Cualquier Juego</a></p><p>Si olvidaste tu clave, usa "¿Olvidaste tu clave?" en la página de entrar: el administrador revisará que la cuenta es tuya y te pasará una clave temporal por WhatsApp.</p><p>Si quieres reportar una publicación o un usuario, usa el botón 🚩 Reportar en la publicación o en el perfil de ese usuario. El administrador lo revisará.</p>'
   }
 };
 
@@ -776,6 +1036,7 @@ function route() {
   if (page === '') return viewHome();
   if (page === 'publicacion' && parts[1]) return viewDetail(Number(parts[1]));
   if (page === 'publicar') return viewPublish();
+  if (page === 'editar' && parts[1]) return viewEdit(Number(parts[1]));
   if (page === 'login') return viewLogin();
   if (page === 'olvide-clave') return viewForgot();
   if (page === 'registro') return viewRegister();

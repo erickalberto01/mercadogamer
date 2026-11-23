@@ -3,7 +3,8 @@
 // y las sesiones viven en D1. Nunca se escribe una contraseña en texto plano.
 //
 // Tablas D1 (se crean solas en la primera llamada a /api/, ver ensureSchema
-// y schema.sql): users, listings, reviews, sessions, throttle, password_resets.
+// y schema.sql): users, listings, reviews, sessions, throttle, password_resets,
+// reports, deals. Imágenes subidas: bucket R2 "mercadogamer-images" (binding IMAGES).
 
 var GAMES = ['Free Fire', 'Clash of Clans', 'Clash Royale', 'Roblox', 'Steam', 'Epic Games', 'PlayStation', 'Xbox', 'Nintendo', 'Otro'];
 var SESSION_DAYS = 30;
@@ -108,8 +109,13 @@ async function getSessionUser(request, env) {
     return null;
   }
   var user = await env.DB.prepare(
-    'SELECT id, username, whatsapp, email, is_admin, must_change_password, created_at FROM users WHERE id = ?',
+    'SELECT id, username, whatsapp, email, is_admin, must_change_password, is_banned, created_at FROM users WHERE id = ?',
   ).bind(session.user_id).first();
+  if (user && user.is_banned) {
+    // Cuenta bloqueada: sus sesiones viejas ya no sirven.
+    await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
+    return null;
+  }
   return user || null;
 }
 
@@ -140,6 +146,12 @@ async function ensureSchema(env) {
     'CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL)',
     'CREATE TABLE IF NOT EXISTS throttle (key TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL)',
     "CREATE TABLE IF NOT EXISTS password_resets (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, whatsapp_contacto TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pendiente', created_at INTEGER NOT NULL, resolved_at INTEGER)",
+    "CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL, listing_id INTEGER, reported_user_id INTEGER NOT NULL, reason TEXT NOT NULL, comment TEXT, status TEXT NOT NULL DEFAULT 'pendiente', created_at INTEGER NOT NULL, resolved_at INTEGER)",
+    'CREATE TABLE IF NOT EXISTS deals (id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, seller_id INTEGER NOT NULL, buyer_id INTEGER NOT NULL, created_at INTEGER NOT NULL)',
+    'CREATE INDEX IF NOT EXISTS idx_reports_status ON reports (status)',
+    'CREATE INDEX IF NOT EXISTS idx_reports_reported ON reports (reported_user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_deals_parties ON deals (seller_id, buyer_id)',
+    'CREATE INDEX IF NOT EXISTS idx_deals_listing ON deals (listing_id)',
     'CREATE INDEX IF NOT EXISTS idx_listings_game ON listings (game)',
     'CREATE INDEX IF NOT EXISTS idx_listings_created ON listings (created_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_listings_views ON listings (views DESC)',
@@ -155,6 +167,8 @@ async function ensureSchema(env) {
   await addColumnIfMissing(env, 'users', 'email', 'TEXT');
   await addColumnIfMissing(env, 'users', 'is_admin', 'INTEGER NOT NULL DEFAULT 0');
   await addColumnIfMissing(env, 'users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0');
+  // Migración v5: bloqueo de usuarios.
+  await addColumnIfMissing(env, 'users', 'is_banned', 'INTEGER NOT NULL DEFAULT 0');
   // El primer usuario registrado es el admin (Erick).
   await env.DB.prepare(
     'UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users) AND NOT EXISTS (SELECT 1 FROM users WHERE is_admin = 1)',
@@ -265,9 +279,10 @@ async function login(request, env) {
     return json({ error: 'Demasiados intentos. Espera 10 minutos.' }, 429);
   }
   var user = await env.DB.prepare(
-    'SELECT id, username, password_hash, salt, whatsapp FROM users WHERE username = ? OR email = ?',
+    'SELECT id, username, password_hash, salt, whatsapp, is_banned FROM users WHERE username = ? OR email = ?',
   ).bind(loginId, loginId).first();
   if (!user) return json({ error: 'Usuario o contraseña incorrectos.' }, 401);
+  if (user.is_banned) return json({ error: 'Tu cuenta está bloqueada. Escríbele al administrador en el grupo de Facebook.' }, 403);
   var hash = await sha256Hex(user.salt + ':' + password);
   if (hash !== user.password_hash) return json({ error: 'Usuario o contraseña incorrectos.' }, 401);
   await throttleReset(env, 'login:' + ipHash);
@@ -406,6 +421,164 @@ async function rejectReset(request, env, id) {
   return json({ ok: true }, 200);
 }
 
+// ---------- Reportes de estafa ----------
+
+var REPORT_REASONS = ['Estafa', 'Cuenta falsa', 'Precio engañoso', 'Otro'];
+
+async function createReport(request, env) {
+  var user = await getSessionUser(request, env);
+  if (!user) return json({ error: 'Inicia sesión para reportar.' }, 401);
+  var data = await readJson(request);
+  if (!data) return json({ error: 'El cuerpo debe ser JSON válido.' }, 400);
+  var reason = typeof data.reason === 'string' ? data.reason.trim() : '';
+  var comment = typeof data.comment === 'string' ? data.comment.trim() : '';
+  if (REPORT_REASONS.indexOf(reason) < 0) return json({ error: 'Elige un motivo del reporte.' }, 400);
+  if (comment.length > 500) return json({ error: 'El comentario debe tener como máximo 500 caracteres.' }, 400);
+  var listingId = data.listing_id ? Number(data.listing_id) : null;
+  var reportedId = null;
+  if (listingId) {
+    var l = await env.DB.prepare('SELECT user_id FROM listings WHERE id = ?').bind(listingId).first();
+    if (!l) return json({ error: 'La publicación no existe.' }, 404);
+    reportedId = l.user_id;
+  } else if (typeof data.username === 'string' && data.username.trim()) {
+    var u = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(data.username.trim().toLowerCase()).first();
+    if (!u) return json({ error: 'Ese usuario no existe.' }, 404);
+    reportedId = u.id;
+  } else {
+    return json({ error: 'Falta la publicación o el usuario a reportar.' }, 400);
+  }
+  if (reportedId === user.id) return json({ error: 'No puedes reportarte a ti mismo.' }, 400);
+  var ipHash = await sha256Hex(getClientIp(request));
+  if (!await throttleCheck(env, 'report:' + ipHash, LOGIN_WINDOW_MS, 5)) {
+    return json({ error: 'Demasiados reportes. Espera 10 minutos.' }, 429);
+  }
+  var dup;
+  if (listingId) {
+    dup = await env.DB.prepare("SELECT id FROM reports WHERE reporter_id = ? AND listing_id = ? AND status = 'pendiente'").bind(user.id, listingId).first();
+  } else {
+    dup = await env.DB.prepare("SELECT id FROM reports WHERE reporter_id = ? AND reported_user_id = ? AND listing_id IS NULL AND status = 'pendiente'").bind(user.id, reportedId).first();
+  }
+  if (dup) return json({ error: 'Ya tienes un reporte pendiente sobre esto.' }, 400);
+  var now = Date.now();
+  var inserted = await env.DB.prepare(
+    "INSERT INTO reports (reporter_id, listing_id, reported_user_id, reason, comment, status, created_at) VALUES (?, ?, ?, ?, ?, 'pendiente', ?)",
+  ).bind(user.id, listingId, reportedId, reason, comment || null, now).run();
+  return json({ ok: true, id: inserted.meta && inserted.meta.last_row_id }, 201);
+}
+
+async function listReports(request, env) {
+  var auth = await requireAdmin(request, env);
+  if (auth.error) return auth.error;
+  var rows = await env.DB.prepare(
+    'SELECT r.id, r.listing_id, r.reason, r.comment, r.status, r.created_at, r.resolved_at, ' +
+    'rep.username AS reporter, ru.username AS reported, l.title AS listing_title ' +
+    'FROM reports r JOIN users rep ON rep.id = r.reporter_id JOIN users ru ON ru.id = r.reported_user_id ' +
+    'LEFT JOIN listings l ON l.id = r.listing_id ' +
+    "ORDER BY CASE WHEN r.status = 'pendiente' THEN 0 ELSE 1 END, r.created_at DESC, r.id DESC LIMIT 50",
+  ).all();
+  return json(rows.results || [], 200);
+}
+
+async function resolveReport(request, env, id, action) {
+  var auth = await requireAdmin(request, env);
+  if (auth.error) return auth.error;
+  var row = await env.DB.prepare('SELECT * FROM reports WHERE id = ?').bind(id).first();
+  if (!row) return json({ error: 'El reporte no existe.' }, 404);
+  if (row.status !== 'pendiente') return json({ error: 'Ese reporte ya fue resuelto.' }, 400);
+  var now = Date.now();
+  if (action === 'dismiss') {
+    await env.DB.prepare("UPDATE reports SET status = 'rechazada', resolved_at = ? WHERE id = ?").bind(now, id).run();
+    return json({ ok: true }, 200);
+  }
+  if (action === 'delete_listing') {
+    if (!row.listing_id) return json({ error: 'Este reporte no tiene publicación para borrar.' }, 400);
+    await env.DB.prepare('DELETE FROM deals WHERE listing_id = ?').bind(row.listing_id).run();
+    await env.DB.prepare('DELETE FROM reports WHERE listing_id = ?').bind(row.listing_id).run();
+    await env.DB.prepare('DELETE FROM listings WHERE id = ?').bind(row.listing_id).run();
+    return json({ ok: true }, 200);
+  }
+  if (action === 'ban_user') {
+    var target = await env.DB.prepare('SELECT is_admin FROM users WHERE id = ?').bind(row.reported_user_id).first();
+    if (!target) return json({ error: 'El usuario reportado no existe.' }, 404);
+    if (target.is_admin) return json({ error: 'No puedes bloquear a un administrador.' }, 403);
+    await env.DB.prepare('UPDATE users SET is_banned = 1 WHERE id = ?').bind(row.reported_user_id).run();
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(row.reported_user_id).run();
+    await env.DB.prepare("UPDATE reports SET status = 'resuelta', resolved_at = ? WHERE id = ?").bind(now, id).run();
+    return json({ ok: true }, 200);
+  }
+  return json({ error: 'Acción no válida.' }, 400);
+}
+
+// ---------- Actividad del admin ----------
+
+async function adminActivity(request, env) {
+  var auth = await requireAdmin(request, env);
+  if (auth.error) return auth.error;
+  var resets = await env.DB.prepare(
+    "SELECT pr.id, u.username, pr.created_at FROM password_resets pr JOIN users u ON u.id = pr.user_id WHERE pr.status = 'pendiente' ORDER BY pr.created_at DESC, pr.id DESC LIMIT 5",
+  ).all();
+  var resetsCount = await env.DB.prepare("SELECT COUNT(*) AS n FROM password_resets WHERE status = 'pendiente'").first();
+  var reports = await env.DB.prepare(
+    "SELECT r.id, rep.username AS reporter, ru.username AS reported, r.reason, r.created_at FROM reports r JOIN users rep ON rep.id = r.reporter_id JOIN users ru ON ru.id = r.reported_user_id WHERE r.status = 'pendiente' ORDER BY r.created_at DESC, r.id DESC LIMIT 5",
+  ).all();
+  var reportsCount = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE status = 'pendiente'").first();
+  var reviews = await env.DB.prepare(
+    'SELECT r.stars, r.comment, r.created_at, a.username AS reviewer, b.username AS reviewed FROM reviews r JOIN users a ON a.id = r.reviewer_id JOIN users b ON b.id = r.reviewed_id ORDER BY r.created_at DESC, r.id DESC LIMIT 10',
+  ).all();
+  var listings = await env.DB.prepare(
+    'SELECT l.id, l.title, l.game, l.created_at, u.username AS seller FROM listings l JOIN users u ON u.id = l.user_id ORDER BY l.created_at DESC, l.id DESC LIMIT 10',
+  ).all();
+  var pending = ((resetsCount && resetsCount.n) || 0) + ((reportsCount && reportsCount.n) || 0);
+  return json({
+    pending_count: pending,
+    pending_resets: (resetsCount && resetsCount.n) || 0,
+    pending_reports: (reportsCount && reportsCount.n) || 0,
+    resets: resets.results || [],
+    reports: reports.results || [],
+    recent_reviews: reviews.results || [],
+    recent_listings: listings.results || [],
+  }, 200);
+}
+
+// ---------- Subida de fotos a R2 ----------
+
+var IMAGE_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
+var MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+async function uploadImage(request, env) {
+  var user = await getSessionUser(request, env);
+  if (!user) return json({ error: 'Inicia sesión para subir una foto.' }, 401);
+  if (!env.IMAGES) return json({ error: 'La subida de fotos aún no está lista (falta el depósito de imágenes). Prueba con una URL por ahora.' }, 503);
+  var ipHash = await sha256Hex(getClientIp(request));
+  if (!await throttleCheck(env, 'upload:' + ipHash, LOGIN_WINDOW_MS, 10)) {
+    return json({ error: 'Demasiadas subidas. Espera 10 minutos.' }, 429);
+  }
+  var form;
+  try { form = await request.formData(); } catch (e) { return json({ error: 'No se recibió la foto.' }, 400); }
+  var file = form.get('image');
+  if (!file || typeof file.arrayBuffer !== 'function') return json({ error: 'Elige una foto.' }, 400);
+  var type = (file.type || '').toLowerCase();
+  var ext = IMAGE_TYPES[type];
+  if (!ext) return json({ error: 'La foto debe ser JPG, PNG, WebP, GIF o AVIF.' }, 400);
+  if (file.size > MAX_IMAGE_BYTES) return json({ error: 'La foto debe pesar 2 MB o menos.' }, 400);
+  var key = 'img/' + randomHex(8) + '-' + Date.now() + '.' + ext;
+  await env.IMAGES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: type } });
+  return json({ ok: true, url: '/img/' + key }, 201);
+}
+
+async function serveImage(request, env, key) {
+  if (!/^[A-Za-z0-9._-]+$/.test(key) || key.indexOf('..') >= 0) return new Response('No encontrada', { status: 404 });
+  if (!env.IMAGES) return new Response('La subida de fotos aún no está lista.', { status: 503 });
+  var obj = await env.IMAGES.get('img/' + key);
+  if (!obj) return new Response('No encontrada', { status: 404 });
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type': (obj.httpMetadata && obj.httpMetadata.contentType) || 'image/jpeg',
+      'Cache-Control': 'public, max-age=86400',
+    },
+  });
+}
+
 // ---------- Listings ----------
 
 function listingRow(row) {
@@ -483,11 +656,9 @@ async function getListing(request, env, id) {
   return json(listingRow(row), 200, headers);
 }
 
-async function createListing(request, env) {
-  var user = await getSessionUser(request, env);
-  if (!user) return json({ error: 'Inicia sesión para publicar.' }, 401);
-  var data = await readJson(request);
-  if (!data) return json({ error: 'El cuerpo debe ser JSON válido.' }, 400);
+// Valida los campos de una publicación (crear o editar).
+// Devuelve {ok:false, error} o {ok:true, fields:{title,game,price,currency,description,image_url}}.
+function normalizeListingFields(data) {
   var title = typeof data.title === 'string' ? data.title.trim() : '';
   var game = typeof data.game === 'string' ? data.game.trim() : '';
   var price = Number(data.price);
@@ -495,33 +666,45 @@ async function createListing(request, env) {
   var description = typeof data.description === 'string' ? data.description.trim() : '';
   var imageUrl = typeof data.image_url === 'string' ? data.image_url.trim() : '';
   if (title.length < 3 || title.length > 100) {
-    return json({ error: 'El título debe tener entre 3 y 100 caracteres.' }, 400);
+    return { ok: false, error: 'El título debe tener entre 3 y 100 caracteres.' };
   }
   var gameCustom = typeof data.game_custom === 'string' ? data.game_custom.trim() : '';
   if (game === 'Otro') {
     if (gameCustom.length < 2 || gameCustom.length > 40) {
-      return json({ error: 'Escribe el nombre del juego (de 2 a 40 caracteres).' }, 400);
+      return { ok: false, error: 'Escribe el nombre del juego (de 2 a 40 caracteres).' };
     }
     game = gameCustom;
   } else if (GAMES.indexOf(game) < 0) {
-    return json({ error: 'Elige un juego de la lista.' }, 400);
+    return { ok: false, error: 'Elige un juego de la lista.' };
   }
   if (!isFinite(price) || price <= 0 || price > 1000000) {
-    return json({ error: 'Escribe un precio válido.' }, 400);
+    return { ok: false, error: 'Escribe un precio válido.' };
   }
   if (currency !== 'DOP' && currency !== 'USD') {
-    return json({ error: 'La moneda debe ser DOP o USD.' }, 400);
+    return { ok: false, error: 'La moneda debe ser DOP o USD.' };
   }
   if (description.length > 1000) {
-    return json({ error: 'La descripción debe tener como máximo 1000 caracteres.' }, 400);
+    return { ok: false, error: 'La descripción debe tener como máximo 1000 caracteres.' };
   }
-  if (!isValidImageUrl(imageUrl)) {
-    return json({ error: 'La foto debe ser una URL válida que empiece con http:// o https://.' }, 400);
+  // La foto puede ser una URL externa o una imagen subida a R2 (/img/...).
+  if (imageUrl && !isValidImageUrl(imageUrl) && imageUrl.indexOf('/img/') !== 0) {
+    return { ok: false, error: 'La foto debe ser una URL válida que empiece con http:// o https://.' };
   }
+  return { ok: true, fields: { title: title, game: game, price: price, currency: currency, description: description || null, image_url: imageUrl || null } };
+}
+
+async function createListing(request, env) {
+  var user = await getSessionUser(request, env);
+  if (!user) return json({ error: 'Inicia sesión para publicar.' }, 401);
+  var data = await readJson(request);
+  if (!data) return json({ error: 'El cuerpo debe ser JSON válido.' }, 400);
+  var check = normalizeListingFields(data);
+  if (!check.ok) return json({ error: check.error }, 400);
+  var f = check.fields;
   var now = Date.now();
   var inserted = await env.DB.prepare(
     'INSERT INTO listings (user_id, title, game, price, currency, description, image_url, status, views, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, \'activa\', 0, ?)',
-  ).bind(user.id, title, game, price, currency, description || null, imageUrl || null, now).run();
+  ).bind(user.id, f.title, f.game, f.price, f.currency, f.description, f.image_url, now).run();
   var id = inserted.meta && inserted.meta.last_row_id;
   return json({ ok: true, id: id }, 201);
 }
@@ -531,14 +714,46 @@ async function updateListing(request, env, id) {
   if (!user) return json({ error: 'Inicia sesión.' }, 401);
   var data = await readJson(request);
   if (!data) return json({ error: 'El cuerpo debe ser JSON válido.' }, 400);
-  var status = typeof data.status === 'string' ? data.status.trim() : '';
-  if (status !== 'activa' && status !== 'vendida') {
-    return json({ error: 'El estado debe ser activa o vendida.' }, 400);
-  }
-  var row = await env.DB.prepare('SELECT user_id FROM listings WHERE id = ?').bind(id).first();
+  var row = await env.DB.prepare('SELECT user_id, status FROM listings WHERE id = ?').bind(id).first();
   if (!row) return json({ error: 'La publicación no existe.' }, 404);
   if (row.user_id !== user.id) return json({ error: 'Solo el vendedor puede cambiar esta publicación.' }, 403);
-  await env.DB.prepare('UPDATE listings SET status = ? WHERE id = ?').bind(status, id).run();
+  // Cambio de estado (activa/vendida).
+  if (typeof data.status === 'string') {
+    var status = data.status.trim();
+    if (status !== 'activa' && status !== 'vendida') {
+      return json({ error: 'El estado debe ser activa o vendida.' }, 400);
+    }
+    if (status === 'vendida' && data.buyer) {
+      // Venta con comprador: se registra el trato (para reseñas verificadas).
+      var buyerName = String(data.buyer).trim().toLowerCase();
+      var buyer = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(buyerName).first();
+      if (!buyer) return json({ error: 'Ese comprador no existe. Revisa el nombre de usuario.' }, 404);
+      if (buyer.id === user.id) return json({ error: 'El comprador no puedes ser tú mismo.' }, 400);
+      await env.DB.prepare('INSERT INTO deals (listing_id, seller_id, buyer_id, created_at) VALUES (?, ?, ?, ?)').bind(id, user.id, buyer.id, Date.now()).run();
+    }
+    await env.DB.prepare('UPDATE listings SET status = ? WHERE id = ?').bind(status, id).run();
+    return json({ ok: true }, 200);
+  }
+  // Edición de campos (solo si sigue activa).
+  if (row.status !== 'activa') {
+    return json({ error: 'Solo puedes editar una publicación activa.' }, 400);
+  }
+  var check = normalizeListingFields(data);
+  if (!check.ok) return json({ error: check.error }, 400);
+  var f = check.fields;
+  await env.DB.prepare('UPDATE listings SET title = ?, game = ?, price = ?, currency = ?, description = ?, image_url = ? WHERE id = ?').bind(f.title, f.game, f.price, f.currency, f.description, f.image_url, id).run();
+  return json({ ok: true }, 200);
+}
+
+async function deleteListing(request, env, id) {
+  var user = await getSessionUser(request, env);
+  if (!user) return json({ error: 'Inicia sesión.' }, 401);
+  var row = await env.DB.prepare('SELECT user_id FROM listings WHERE id = ?').bind(id).first();
+  if (!row) return json({ error: 'La publicación no existe.' }, 404);
+  if (row.user_id !== user.id && !user.is_admin) return json({ error: 'Solo el vendedor o el administrador puede borrar esta publicación.' }, 403);
+  await env.DB.prepare('DELETE FROM deals WHERE listing_id = ?').bind(id).run();
+  await env.DB.prepare('DELETE FROM reports WHERE listing_id = ?').bind(id).run();
+  await env.DB.prepare('DELETE FROM listings WHERE id = ?').bind(id).run();
   return json({ ok: true }, 200);
 }
 
@@ -548,7 +763,8 @@ async function getUserProfile(env, username) {
   var user = await env.DB.prepare(
     'SELECT u.id, u.username, u.whatsapp, u.created_at, ' +
     '(SELECT AVG(stars) FROM reviews r WHERE r.reviewed_id = u.id) AS avg_stars, ' +
-    '(SELECT COUNT(*) FROM reviews r WHERE r.reviewed_id = u.id) AS review_count ' +
+    '(SELECT COUNT(*) FROM reviews r WHERE r.reviewed_id = u.id) AS review_count, ' +
+    '(SELECT COUNT(*) FROM reviews r2 WHERE r2.reviewed_id = u.id AND EXISTS (SELECT 1 FROM deals d WHERE (d.seller_id = r2.reviewed_id AND d.buyer_id = r2.reviewer_id) OR (d.seller_id = r2.reviewer_id AND d.buyer_id = r2.reviewed_id))) AS verified_count ' +
     'FROM users u WHERE u.username = ?',
   ).bind(username).first();
   if (!user) return null;
@@ -556,12 +772,15 @@ async function getUserProfile(env, username) {
     LISTING_SELECT + 'WHERE l.user_id = ? ORDER BY l.created_at DESC, l.id DESC LIMIT 50',
   ).bind(user.id).all();
   var reviews = await env.DB.prepare(
-    'SELECT r.id, r.stars, r.comment, r.created_at, u.username AS reviewer ' +
+    'SELECT r.id, r.stars, r.comment, r.created_at, u.username AS reviewer, ' +
+    'CASE WHEN EXISTS (SELECT 1 FROM deals d WHERE (d.seller_id = r.reviewed_id AND d.buyer_id = r.reviewer_id) OR (d.seller_id = r.reviewer_id AND d.buyer_id = r.reviewed_id)) THEN 1 ELSE 0 END AS verified ' +
     'FROM reviews r JOIN users u ON u.id = r.reviewer_id ' +
     'WHERE r.reviewed_id = ? ORDER BY r.created_at DESC, r.id DESC LIMIT 100',
   ).bind(user.id).all();
+  var pub = publicUser(user);
+  pub.verified_count = user.verified_count || 0;
   return {
-    user: publicUser(user),
+    user: pub,
     listings: (listings.results || []).map(listingRow),
     reviews: reviews.results || [],
   };
@@ -631,6 +850,20 @@ export default {
         return json({ error: 'Ruta no encontrada.' }, 404);
       }
 
+      if (path === '/api/admin/reports' && request.method === 'GET') return listReports(request, env);
+      if (path.startsWith('/api/admin/reports/') && request.method === 'POST') {
+        var repParts = path.slice('/api/admin/reports/'.length).split('/');
+        var repId = Number(repParts[0]);
+        if (!Number.isInteger(repId) || repId <= 0) return json({ error: 'El reporte no existe.' }, 404);
+        return resolveReport(request, env, repId, repParts[1]);
+      }
+
+      if (path === '/api/admin/activity' && request.method === 'GET') return adminActivity(request, env);
+
+      if (path === '/api/reports' && request.method === 'POST') return createReport(request, env);
+
+      if (path === '/api/upload' && request.method === 'POST') return uploadImage(request, env);
+
       if (path === '/api/listings' && request.method === 'GET') return listListings(request, env);
       if (path === '/api/listings' && request.method === 'POST') return createListing(request, env);
 
@@ -639,6 +872,7 @@ export default {
         if (!Number.isInteger(id) || id <= 0) return json({ error: 'La publicación no existe.' }, 404);
         if (request.method === 'GET') return getListing(request, env, id);
         if (request.method === 'PATCH') return updateListing(request, env, id);
+        if (request.method === 'DELETE') return deleteListing(request, env, id);
         return json({ error: 'Método no permitido.' }, 405);
       }
 
@@ -661,6 +895,10 @@ export default {
       }
 
       return json({ error: 'Ruta no encontrada.' }, 404);
+    }
+
+    if (path.startsWith('/img/') && request.method === 'GET') {
+      return serveImage(request, env, path.slice(5));
     }
 
     if (env.ASSETS) {
