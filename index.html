@@ -105,6 +105,9 @@ main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
 .game-card{border-radius:16px;padding:18px 10px;text-align:center;cursor:pointer;border:1px solid var(--line);transition:transform .15s,box-shadow .15s}
 .game-card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.5)}
 .gc-emoji{font-size:38px;display:block;line-height:1}
+.gc-logo{background:#fff;border-radius:12px;height:64px;display:flex;align-items:center;justify-content:center;padding:8px 10px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.gc-logo img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.gc-logo .gc-emoji{font-size:34px}
 .gc-name{font-weight:800;font-size:15px;display:block;margin-top:8px;color:#fff}
 .guide h2{margin-bottom:8px}
 .guide p{margin:10px 0}
@@ -168,23 +171,30 @@ footer a{color:var(--muted)}
 <script>
 'use strict';
 var GAMES = ['Free Fire', 'Clash of Clans', 'Clash Royale', 'Roblox', 'Steam', 'Epic Games', 'PlayStation', 'Xbox', 'Nintendo', 'Otro'];
-// Tarjetas visuales por juego: solo emoji + degradado CSS, sin logos oficiales
-// ni imágenes externas con marca registrada.
+// Tarjetas visuales por juego: logo oficial real (logos/ en el repo, servidos
+// por el Worker) sobre el degradado; el emoji queda como respaldo si la
+// imagen no carga. "Otro" no tiene logo: mando genérico en placa blanca.
 var GAME_META = {
-  'Free Fire': { emoji: '🔥', bg: 'linear-gradient(135deg,#f97316,#dc2626)' },
-  'Clash of Clans': { emoji: '⚔️', bg: 'linear-gradient(135deg,#f59e0b,#b45309)' },
-  'Clash Royale': { emoji: '👑', bg: 'linear-gradient(135deg,#3b82f6,#1d4ed8)' },
-  'Roblox': { emoji: '🧱', bg: 'linear-gradient(135deg,#ef4444,#991b1b)' },
-  'Steam': { emoji: '🎮', bg: 'linear-gradient(135deg,#334155,#0f172a)' },
-  'Epic Games': { emoji: '🚀', bg: 'linear-gradient(135deg,#6b7280,#111827)' },
-  'PlayStation': { emoji: '🎮', bg: 'linear-gradient(135deg,#2563eb,#1e3a8a)' },
-  'Xbox': { emoji: '🟢', bg: 'linear-gradient(135deg,#22c55e,#15803d)' },
-  'Nintendo': { emoji: '🔴', bg: 'linear-gradient(135deg,#ef4444,#7f1d1d)' },
-  'Otro': { emoji: '➕', bg: 'linear-gradient(135deg,#a855f7,#6d28d9)' }
+  'Free Fire': { emoji: '🔥', bg: 'linear-gradient(135deg,#f97316,#dc2626)', logo: 'logos/free-fire.svg' },
+  'Clash of Clans': { emoji: '⚔️', bg: 'linear-gradient(135deg,#f59e0b,#b45309)', logo: 'logos/clash-of-clans.svg' },
+  'Clash Royale': { emoji: '👑', bg: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', logo: 'logos/clash-royale.svg' },
+  'Roblox': { emoji: '🧱', bg: 'linear-gradient(135deg,#ef4444,#991b1b)', logo: 'logos/roblox.svg' },
+  'Steam': { emoji: '🎮', bg: 'linear-gradient(135deg,#334155,#0f172a)', logo: 'logos/steam.svg' },
+  'Epic Games': { emoji: '🚀', bg: 'linear-gradient(135deg,#6b7280,#111827)', logo: 'logos/epic-games.svg' },
+  'PlayStation': { emoji: '🎮', bg: 'linear-gradient(135deg,#2563eb,#1e3a8a)', logo: 'logos/playstation.svg' },
+  'Xbox': { emoji: '🟢', bg: 'linear-gradient(135deg,#22c55e,#15803d)', logo: 'logos/xbox.svg' },
+  'Nintendo': { emoji: '🔴', bg: 'linear-gradient(135deg,#ef4444,#7f1d1d)', logo: 'logos/nintendo.svg' },
+  'Otro': { emoji: '🎮', bg: 'linear-gradient(135deg,#a855f7,#6d28d9)' }
 };
 function gameCardHtml(g) {
   var m = GAME_META[g] || { emoji: '🎮', bg: 'linear-gradient(135deg,#1e293b,#312e81)' };
-  return '<div class="game-card" data-game="' + esc(g) + '" style="background:' + m.bg + '"><span class="gc-emoji">' + m.emoji + '</span><span class="gc-name">' + esc(g) + '</span></div>';
+  var inner;
+  if (m.logo) {
+    inner = '<span class="gc-logo"><img src="' + m.logo + '" alt="Logo de ' + esc(g) + '" loading="lazy" onerror="this.style.display=\'none\';var f=this.parentNode.querySelector(\'.gc-emoji-fallback\');if(f){f.style.display=\'block\';}"><span class="gc-emoji gc-emoji-fallback" style="display:none">' + m.emoji + '</span></span>';
+  } else {
+    inner = '<span class="gc-logo"><span class="gc-emoji">' + m.emoji + '</span></span>';
+  }
+  return '<div class="game-card" data-game="' + esc(g) + '" style="background:' + m.bg + '">' + inner + '<span class="gc-name">' + esc(g) + '</span></div>';
 }
 var COUNTRIES = [
   { code: '1', name: 'República Dominicana', flag: '🇩🇴' },
